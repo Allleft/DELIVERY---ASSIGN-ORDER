@@ -36,7 +36,7 @@ class ProjectGovernanceTest(unittest.TestCase):
             "`frontend/overrides.js` 仅兼容 shim",
             "tools/recycle.ps1",
             "trip grouping + assignment",
-            "hard constraints -> urgent coverage -> preferred-zone match -> minimize driver-day zone spread -> assignment coverage -> same-day vehicle minimization -> used drivers / balance / normal objective",
+            "hard constraints -> urgent coverage -> preferred-zone match -> minimize driver-day zone spread -> same-day vehicle minimization -> assignment coverage -> used drivers / balance / normal objective",
             "zone_mismatch_penalty=2500",
             "DRIVER_UNUSED_NO_FEASIBLE_CANDIDATE",
             "Plan ID Migration (2026-04-23)",

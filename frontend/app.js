@@ -1518,7 +1518,7 @@ function planDispatch(snapshot) {
             `Assignment group ${group.plan_group_id} satisfies vehicle ${vehicle.vehicle_id} capacity`,
             `Coarse time check ${minutesToHHMM(estimate.estimated_start)}-${minutesToHHMM(estimate.estimated_finish)} within shift`,
             preferredZoneMatch
-              ? "Matched driver preferred zone"
+              ? "Preferred zone matched."
               : (zoneMismatch ? "Driver preferred zone mismatch applied" : "Driver has no preferred zone constraint"),
             continuityMatch ? "Matched historical driver-vehicle continuity" : "No historical driver-vehicle continuity match"
           ]
@@ -1562,14 +1562,8 @@ function planDispatch(snapshot) {
 
       const leftRuns = driverRunCount.get(left.driver.driver_id) || 0;
       const rightRuns = driverRunCount.get(right.driver.driver_id) || 0;
-      const leftUnusedRank = leftRuns === 0 ? 0 : 1;
-      const rightUnusedRank = rightRuns === 0 ? 0 : 1;
-      if (leftUnusedRank !== rightUnusedRank) return leftUnusedRank - rightUnusedRank;
-      if (leftRuns !== rightRuns) return leftRuns - rightRuns;
-
       const leftMinutes = driverMinutes.get(left.driver.driver_id) || 0;
       const rightMinutes = driverMinutes.get(right.driver.driver_id) || 0;
-      if (leftMinutes !== rightMinutes) return leftMinutes - rightMinutes;
 
       const leftBusiness =
         left.objective_score +
@@ -1612,6 +1606,13 @@ function planDispatch(snapshot) {
           { order_ids: group.orders.map((order) => order.order_id), dispatch_date: group.dispatch_date, zone_code: group.zone_code }
         )
       );
+      const latestPlanUnassigned = exceptions[exceptions.length - 1];
+      if (latestPlanUnassigned && latestPlanUnassigned.reason_code === "PLAN_UNASSIGNED") {
+        latestPlanUnassigned.reason_text = group.urgent_count > 0
+          ? "No feasible assignment remained after applying urgent/zone/continuity priorities under current resource conflicts."
+          : "Normal order left unassigned after higher-priority zone/vehicle continuity optimization under existing constraints.";
+        latestPlanUnassigned.suggested_action = "Review resource overlaps or add compatible drivers/vehicles.";
+      }
       continue;
     }
 
@@ -1626,9 +1627,23 @@ function planDispatch(snapshot) {
     if (group.designated_driver_id !== null) {
       pickedExplanation.push("Selected due to designated driver requirement.");
     }
+    if (picked.preferred_zone_match) {
+      pickedExplanation.push("Selected to preserve preferred-zone alignment.");
+    } else if (picked.driver.preferred_zone_codes.length > 0) {
+      pickedExplanation.push("Cross-zone assignment allowed because higher-priority coverage or feasibility required it.");
+    }
+    const driverDayKey = `${picked.driver.driver_id}|${picked.group.dispatch_date}`;
+    const existingDriverDay = selectedByDriverDay.get(driverDayKey) || [];
+    if (existingDriverDay.length > 0) {
+      const hasSameVehicle = existingDriverDay.some((item) => asText(item.vehicle.vehicle_id) === asText(picked.vehicle.vehicle_id));
+      if (hasSameVehicle) {
+        pickedExplanation.push("Kept same vehicle for this driver on the same dispatch date.");
+      } else {
+        pickedExplanation.push("Vehicle switch required due to capacity/time/resource constraints.");
+      }
+    }
     driverSchedule.get(picked.driver.driver_id).push([picked.estimate.estimated_start, picked.estimate.estimated_finish]);
     vehicleSchedule.get(picked.vehicle.vehicle_id).push([picked.estimate.estimated_start, picked.estimate.estimated_finish]);
-    const driverDayKey = `${picked.driver.driver_id}|${picked.group.dispatch_date}`;
     if (!selectedByDriverDay.has(driverDayKey)) selectedByDriverDay.set(driverDayKey, []);
     selectedByDriverDay.get(driverDayKey).push(picked);
     driverRunCount.set(picked.driver.driver_id, (driverRunCount.get(picked.driver.driver_id) || 0) + 1);

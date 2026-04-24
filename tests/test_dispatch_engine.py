@@ -109,6 +109,7 @@ class DispatchEngineTest(unittest.TestCase):
 
         self.assertEqual(1, len(result.order_assignments))
         self.assertEqual(1, result.order_assignments[0].driver_id)
+        self.assertFalse(any(exc.reason_code == "NO_FEASIBLE_ASSIGNMENT" for exc in result.exceptions))
 
     def test_designated_driver_unavailable_returns_exception(self) -> None:
         orders = [self._order(3, "Alpha", "08:00", "10:00", designated_driver_id=99)]
@@ -768,7 +769,7 @@ class AssignmentSolverVehicleSwitchTest(unittest.TestCase):
         self.assertEqual(1, delta_a)
         self.assertEqual(0, delta_c)
 
-    def test_greedy_allows_business_priority_after_zone_keys(self) -> None:
+    def test_greedy_prioritizes_switch_delta_before_business_score(self) -> None:
         solver = AssignmentSolver(
             ScoringPolicy(
                 vehicle_switch_penalty=0,
@@ -789,7 +790,7 @@ class AssignmentSolverVehicleSwitchTest(unittest.TestCase):
         by_run = {candidate.run_id: candidate for candidate in selected}
 
         self.assertEqual(2, len(selected))
-        self.assertEqual(2, by_run["RUN-B"].vehicle_id)
+        self.assertEqual(1, by_run["RUN-B"].vehicle_id)
 
     def test_greedy_tie_on_switch_delta_uses_business_then_finish(self) -> None:
         run_a = self._run("RUN-T1", date(2026, 4, 22), "08:00", "09:00")
@@ -862,6 +863,22 @@ class AssignmentSolverVehicleSwitchTest(unittest.TestCase):
         self.assertEqual(1, by_run["RUN-CP-B"].vehicle_id)
 
     @unittest.skipUnless(ORTOOLS_CP_SAT_AVAILABLE, "OR-Tools CP-SAT is not available")
+    def test_cp_sat_minimizes_switch_before_assignment_coverage(self) -> None:
+        run_a = self._run("RUN-CP-S1", date(2026, 4, 22), "08:00", "09:00")
+        run_b = self._run("RUN-CP-S2", date(2026, 4, 22), "09:10", "10:10")
+        run_a.designated_driver_id = 1
+        run_b.designated_driver_id = 1
+        context = self._context([run_a, run_b])
+        candidates = [
+            self._candidate("RUN-CP-S1", driver_id=1, vehicle_id=1, start="08:00", finish="09:00", objective=1200),
+            self._candidate("RUN-CP-S2", driver_id=1, vehicle_id=2, start="09:10", finish="10:10", objective=5000),
+        ]
+
+        selected = self.solver._solve_with_cp_sat(candidates, context)
+
+        self.assertEqual(1, len(selected))
+
+    @unittest.skipUnless(ORTOOLS_CP_SAT_AVAILABLE, "OR-Tools CP-SAT is not available")
     def test_cp_sat_lexicographic_uses_objective_when_switch_proxy_ties(self) -> None:
         run_a = self._run("RUN-CP-C", date(2026, 4, 22), "08:00", "09:00")
         run_b = self._run("RUN-CP-D", date(2026, 4, 22), "09:10", "10:10")
@@ -916,7 +933,7 @@ class AssignmentSolverVehicleSwitchTest(unittest.TestCase):
         explanation = " ".join(run_b_candidate.explanation)
 
         self.assertIn("Vehicle switch applied between consecutive runs for this driver.", explanation)
-        self.assertIn("Switched vehicle due to feasibility/resource constraints.", explanation)
+        self.assertIn("Vehicle switch required due to capacity/time/resource constraints.", explanation)
 
     def test_switch_explanation_marks_same_vehicle_continuity(self) -> None:
         run_a = self._run("RUN-X", date(2026, 4, 22), "08:00", "09:00")
@@ -930,7 +947,33 @@ class AssignmentSolverVehicleSwitchTest(unittest.TestCase):
         annotated = self.solver._annotate_vehicle_switch_explanations(selected, selected, context)
         run_b_candidate = next(item for item in annotated if item.run_id == "RUN-Y")
         explanation = " ".join(run_b_candidate.explanation)
-        self.assertIn("Kept same vehicle across consecutive runs for this driver.", explanation)
+        self.assertIn("Kept same vehicle for this driver on the same dispatch date.", explanation)
+
+    def test_driver_explanation_includes_preferred_zone_alignment(self) -> None:
+        run = self._run("RUN-ZONE-MATCH", date(2026, 4, 22), "08:00", "09:00", zone_code="LOCAL")
+        driver = replace(self.driver_1, preferred_zone_codes=("LOCAL",))
+        context = self._context([run], drivers_by_id={1: driver, 2: self.driver_2})
+        selected = [self._candidate("RUN-ZONE-MATCH", driver_id=1, vehicle_id=1, start="08:00", finish="09:00", objective=1000)]
+
+        annotated = self.solver._annotate_driver_utilization_explanations(selected, context)
+        explanation = " ".join(annotated[0].explanation)
+
+        self.assertIn("Preferred zone matched.", explanation)
+        self.assertIn("Selected to preserve preferred-zone alignment.", explanation)
+
+    def test_driver_explanation_includes_cross_zone_allowed_reason(self) -> None:
+        run = self._run("RUN-ZONE-X", date(2026, 4, 22), "08:00", "09:00", zone_code="WEST")
+        driver = replace(self.driver_1, preferred_zone_codes=("LOCAL",))
+        context = self._context([run], drivers_by_id={1: driver, 2: self.driver_2})
+        selected = [self._candidate("RUN-ZONE-X", driver_id=1, vehicle_id=1, start="08:00", finish="09:00", objective=1000)]
+
+        annotated = self.solver._annotate_driver_utilization_explanations(selected, context)
+        explanation = " ".join(annotated[0].explanation)
+
+        self.assertIn(
+            "Cross-zone assignment allowed because higher-priority coverage or feasibility required it.",
+            explanation,
+        )
 
     def _context(
         self,

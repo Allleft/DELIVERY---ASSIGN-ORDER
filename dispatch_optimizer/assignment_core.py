@@ -433,11 +433,6 @@ class AssignmentSolver:
             if best_zone_spread_proxy is None:
                 return self._solve_greedily(candidates, context)
 
-        assigned_runs_expr = sum(variables[idx] for idx in range(len(candidates)))
-        best_assigned_runs = self._lock_stage_or_none(model, assigned_runs_expr, maximize=True)
-        if best_assigned_runs is None:
-            return self._solve_greedily(candidates, context)
-
         use_vehicle_vars: dict[tuple[int, object, int], "cp_model.IntVar"] = {}
         grouped_vehicle_indices: dict[tuple[int, object, int], list[int]] = defaultdict(list)
         driver_day_vehicle_ids: dict[tuple[int, object], set[int]] = defaultdict(set)
@@ -483,6 +478,11 @@ class AssignmentSolver:
             best_total_switch_proxy = self._lock_stage_or_none(model, total_switch_proxy, maximize=False)
             if best_total_switch_proxy is None:
                 return self._solve_greedily(candidates, context)
+
+        assigned_runs_expr = sum(variables[idx] for idx in range(len(candidates)))
+        best_assigned_runs = self._lock_stage_or_none(model, assigned_runs_expr, maximize=True)
+        if best_assigned_runs is None:
+            return self._solve_greedily(candidates, context)
 
         if used_driver_vars:
             used_driver_expr = sum(used_driver_vars.values())
@@ -569,25 +569,22 @@ class AssignmentSolver:
         selected_run_counts: dict[int, int],
         current_driver_minutes: dict[int, int],
         context: AssignmentContext,
-    ) -> tuple[int, int, int, int, int, int, int, int, int, str, int]:
+    ) -> tuple[int, int, int, int, int, int, str, int]:
         driver_id = candidate.driver_id
         driver_run_count = selected_run_counts[driver_id]
         driver_minutes = current_driver_minutes[driver_id]
+        business_score = (
+            candidate.objective_score
+            + (self.scoring_policy.unused_driver_bonus if driver_run_count == 0 else 0)
+            - driver_run_count * self.scoring_policy.driver_run_balance_weight
+            - driver_minutes * self.scoring_policy.driver_balance_penalty_per_min
+        )
         return (
             0 if candidate.preferred_zone_match else 1,
             0 if self._same_zone_continuity_hit(candidate, selected_by_driver_day, context) else 1,
             self._zone_mismatch_rank(candidate, context),
-            -(
-                candidate.objective_score
-                - self._switch_delta_penalty_for_candidate(candidate, selected_by_driver_day, context)
-                + (self.scoring_policy.unused_driver_bonus if driver_run_count == 0 else 0)
-                - driver_run_count * self.scoring_policy.driver_run_balance_weight
-                - driver_minutes * self.scoring_policy.driver_balance_penalty_per_min
-            ),
             self._switch_delta_for_candidate(candidate, selected_by_driver_day, context),
-            0 if driver_run_count == 0 else 1,
-            driver_run_count,
-            driver_minutes,
+            -business_score,
             candidate.estimated_finish,
             candidate.run_id,
             candidate.vehicle_id,
@@ -719,7 +716,7 @@ class AssignmentSolver:
                 previous = ordered[index - 1]
                 current = ordered[index]
                 if previous.vehicle_id == current.vehicle_id:
-                    extra_by_run_id[current.run_id].append("Kept same vehicle across consecutive runs for this driver.")
+                    extra_by_run_id[current.run_id].append("Kept same vehicle for this driver on the same dispatch date.")
                     continue
 
                 extra_by_run_id[current.run_id].append("Vehicle switch applied between consecutive runs for this driver.")
@@ -734,7 +731,7 @@ class AssignmentSolver:
                     selected,
                     context,
                 ):
-                    extra_by_run_id[current.run_id].append("Switched vehicle due to feasibility/resource constraints.")
+                    extra_by_run_id[current.run_id].append("Vehicle switch required due to capacity/time/resource constraints.")
 
         annotated: list[CandidateAssignment] = []
         for candidate in selected:
@@ -784,6 +781,14 @@ class AssignmentSolver:
             extra_messages.append("Selected due to urgent coverage priority.")
         if run.designated_driver_id is not None:
             extra_messages.append("Selected due to designated driver requirement.")
+        driver = context.drivers_by_id[candidate.driver_id]
+        has_preferred_zone = bool(driver.preferred_zone_codes)
+        zone_matched = run.zone_code in driver.preferred_zone_codes
+        if zone_matched:
+            extra_messages.append("Preferred zone matched.")
+            extra_messages.append("Selected to preserve preferred-zone alignment.")
+        elif has_preferred_zone:
+            extra_messages.append("Cross-zone assignment allowed because higher-priority coverage or feasibility required it.")
         return extra_messages
 
     def _switch_forced_by_feasibility_or_resources(

@@ -292,12 +292,10 @@ python -m dispatch_optimizer.cli examples/sample-dispatch-input.json
 - Top-level output contract remains unchanged: `plans / order_assignments / exceptions`.
 ## Same-Day Vehicle Continuity Priority (2026-04-23)
 
-- Priority order in assignment optimization is fixed as:
-  `used-drivers -> urgent -> coverage -> same-day vehicle minimization -> run/minutes balance -> normal objective`.
-- `used-drivers` means maximizing the number of activated available drivers before lower-level efficiency scoring.
+- Priority is now governed by the newer Zone-First policy (see section below), where same-day vehicle continuity is enforced before normal coverage.
 - Same-day vehicle minimization means minimizing distinct vehicles per `(driver_id, dispatch_date)`.
 - Greedy path uses explicit ordering:
-  1) `switch_delta` ascending, 2) unused-driver first, 3) lower driver run count/minutes, 4) business score, 5) `estimated_finish`.
+  1) preferred-zone match, 2) same-zone continuity, 3) zone mismatch rank, 4) `switch_delta`, 5) business/balance score, 6) `estimated_finish`.
 - CP-SAT path keeps lexicographic stages and does **not** collapse to a single weighted sum.
 - This preference remains a soft rule and never overrides hard constraints.
 
@@ -320,11 +318,12 @@ python -m dispatch_optimizer.cli examples/sample-dispatch-input.json
 
 - Zone preference is now treated as a **strong soft constraint**.
 - Objective priority is:
-  `hard constraints -> urgent coverage -> preferred-zone match -> minimize driver-day zone spread -> assignment coverage -> same-day vehicle minimization -> used drivers / balance / normal objective`.
+  `hard constraints -> urgent coverage -> preferred-zone match -> minimize driver-day zone spread -> same-day vehicle minimization -> assignment coverage -> used drivers / balance / normal objective`.
 - Driver preferred zone logic:
   - matched preferred zone gets a strong bonus (`preferred_zone_bonus=3000`);
   - mismatch against configured preferred zones gets a strong penalty (`zone_mismatch_penalty=2500`);
   - drivers without preferred zones are not penalized for mismatch.
+- Normal orders are **not** pre-filtered away; feasible candidates are still generated. The lower coverage priority only affects final selection order.
 - Same-day zone continuity is favored: if a driver already handles a zone on a dispatch date, subsequent groups from that zone are preferred for that driver.
 - Zone is still **not** a hard constraint. When resources are limited, cross-zone assignment remains allowed to avoid unnecessary unassigned orders.
 - `plans` are aggregated by `(dispatch_date, driver_id, vehicle_id)` for business readability.

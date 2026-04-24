@@ -449,6 +449,69 @@ process.stdout.write(JSON.stringify({
         self.assertEqual(1, result["first_driver"])
         self.assertEqual(1, result["second_driver"])
 
+    def test_local_planner_prefers_same_vehicle_continuity_before_business_score(self) -> None:
+        result = _run_frontend_probe(
+            """
+const snapshot = context.createInitialSnapshot();
+snapshot.orders = [
+  {
+    order_id: 9401,
+    dispatch_date: '2026-04-22',
+    delivery_address: '328 Swanston Street, Melbourne VIC 3000',
+    postcode: '3000',
+    urgency: 'NORMAL',
+    window_start: '08:00',
+    window_end: '09:00',
+    designated_driver_id: 1,
+    load_type: 'MIXED',
+    pallet_count: 2,
+    bag_count: 0,
+    kg_count: 0
+  },
+  {
+    order_id: 9402,
+    dispatch_date: '2026-04-22',
+    delivery_address: '100 St Kilda Road, Melbourne VIC 3004',
+    postcode: '3004',
+    urgency: 'NORMAL',
+    window_start: '09:30',
+    window_end: '10:30',
+    designated_driver_id: 1,
+    load_type: 'MIXED',
+    pallet_count: 1,
+    bag_count: 0,
+    kg_count: 0
+  }
+];
+snapshot.drivers = [
+  {
+    driver_id: 1,
+    name: 'Driver A',
+    shift_start: '07:00',
+    shift_end: '18:00',
+    is_available: true,
+    preferred_zone_codes: ['LOCAL'],
+    historical_vehicle_ids: [2],
+    start_location: 'Depot',
+    end_location: 'Depot'
+  }
+];
+snapshot.vehicles = [
+  { vehicle_id: 1, vehicle_type: 'van', is_available: true, kg_capacity: 0, pallet_capacity: 2, tub_capacity: 12, trolley_capacity: 0, stillage_capacity: 0 },
+  { vehicle_id: 2, vehicle_type: 'van', is_available: true, kg_capacity: 0, pallet_capacity: 1, tub_capacity: 12, trolley_capacity: 0, stillage_capacity: 0 }
+];
+const result = context.planDispatch(snapshot);
+const byOrder = {};
+for (const item of result.order_assignments || []) byOrder[String(item.order_id)] = item.vehicle_id;
+process.stdout.write(JSON.stringify({
+  first_vehicle: byOrder['9401'],
+  second_vehicle: byOrder['9402']
+}));
+"""
+        )
+        self.assertEqual(1, result["first_vehicle"])
+        self.assertEqual(1, result["second_vehicle"])
+
 
 if __name__ == "__main__":
     unittest.main()
