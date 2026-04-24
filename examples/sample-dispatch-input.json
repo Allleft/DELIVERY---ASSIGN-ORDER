@@ -1,0 +1,704 @@
+{
+  "zone_by_postcode": {
+    "3000": "LOCAL",
+    "3004": "LOCAL",
+    "3006": "LOCAL",
+    "3030": "WEST",
+    "3052": "LOCAL",
+    "3148": "SOUTH_EAST",
+    "3620": "MAJOR_EAST",
+    "3777": "MAJOR_EAST"
+  },
+  "zone_label_by_code": {
+    "LOCAL": "Local",
+    "WEST": "West",
+    "MAJOR_EAST": "Major East",
+    "SOUTH_EAST": "South East"
+  },
+  "geocoder": {
+    "Depot": [
+      -37.78,
+      144.93
+    ],
+    "SouthHub": [
+      -37.84,
+      144.98
+    ],
+    "WestHub": [
+      -37.88,
+      144.7
+    ],
+    "328 Swanston Street, Melbourne VIC 3000": [
+      -37.8097,
+      144.9653
+    ],
+    "1341 Dandenong Road, Chadstone VIC 3148": [
+      -37.886,
+      145.0836
+    ],
+    "100 St Kilda Road, Melbourne VIC 3004": [
+      -37.8216,
+      144.9689
+    ],
+    "180 St Kilda Road, Melbourne VIC 3006": [
+      -37.8227,
+      144.9684
+    ],
+    "Swanston St & Flinders St, Melbourne VIC 3000": [
+      -37.8178,
+      144.9671
+    ],
+    "Corner of Elizabeth Street and Victoria Street, Melbourne VIC 3000": [
+      -37.8076,
+      144.9568
+    ],
+    "Elliott Avenue, Parkville VIC 3052": [
+      -37.784,
+      144.9514
+    ],
+    "K Road, Werribee VIC 3030": [
+      -37.9286,
+      144.674
+    ],
+    "Glen Eadie Avenue, Healesville VIC 3777": [
+      -37.6826,
+      145.529
+    ],
+    "75 Lake Road, Kyabram VIC 3620": [
+      -36.3065,
+      145.0549
+    ]
+  },
+  "orders": [
+    {
+      "order_id": 2001,
+      "dispatch_date": "2026-04-22",
+      "delivery_address": "328 Swanston Street, Melbourne VIC 3000",
+      "lat": -37.8097,
+      "lng": 144.9653,
+      "postcode": "3000",
+      "zone_code": "LOCAL",
+      "urgency": "URGENT",
+      "window_start": "08:00",
+      "window_end": "12:00",
+      "load_type": "MIXED",
+      "kg_count": 140,
+      "pallet_count": 2,
+      "bag_count": 6
+    },
+    {
+      "order_id": 2002,
+      "dispatch_date": "2026-04-22",
+      "delivery_address": "200 Bourke Street, Melbourne VIC 3000",
+      "lat": -37.8127,
+      "lng": 144.9646,
+      "postcode": "3000",
+      "zone_code": "LOCAL",
+      "urgency": "NORMAL",
+      "window_start": "09:00",
+      "window_end": "13:30",
+      "load_type": "ON_PALLET",
+      "kg_count": 210,
+      "pallet_count": 3,
+      "bag_count": 0
+    },
+    {
+      "order_id": 2003,
+      "dispatch_date": "2026-04-22",
+      "delivery_address": "333 Collins Street, Melbourne VIC 3000",
+      "lat": -37.8161,
+      "lng": 144.961,
+      "postcode": "3000",
+      "zone_code": "LOCAL",
+      "urgency": "NORMAL",
+      "window_start": "08:30",
+      "window_end": "12:30",
+      "load_type": "MIXED",
+      "kg_count": 105,
+      "pallet_count": 1,
+      "bag_count": 7
+    },
+    {
+      "order_id": 2004,
+      "dispatch_date": "2026-04-22",
+      "delivery_address": "500 Bourke Street, Melbourne VIC 3000",
+      "lat": -37.8153,
+      "lng": 144.9589,
+      "postcode": "3000",
+      "zone_code": "LOCAL",
+      "urgency": "URGENT",
+      "window_start": "07:45",
+      "window_end": "11:30",
+      "load_type": "ON_PALLET",
+      "kg_count": 180,
+      "pallet_count": 2,
+      "bag_count": 0
+    },
+    {
+      "order_id": 2005,
+      "dispatch_date": "2026-04-22",
+      "delivery_address": "120 Spencer Street, Melbourne VIC 3000",
+      "lat": -37.8183,
+      "lng": 144.9524,
+      "postcode": "3000",
+      "zone_code": "LOCAL",
+      "urgency": "NORMAL",
+      "window_start": "10:00",
+      "window_end": "16:00",
+      "load_type": "LOOSE",
+      "kg_count": 70,
+      "pallet_count": 0,
+      "bag_count": 13
+    },
+    {
+      "order_id": 2006,
+      "dispatch_date": "2026-04-22",
+      "delivery_address": "250 Flinders Street, Melbourne VIC 3000",
+      "lat": -37.818,
+      "lng": 144.9675,
+      "postcode": "3000",
+      "zone_code": "LOCAL",
+      "urgency": "NORMAL",
+      "window_start": "11:00",
+      "window_end": "17:00",
+      "load_type": "MIXED",
+      "kg_count": 110,
+      "pallet_count": 1,
+      "bag_count": 9
+    },
+    {
+      "order_id": 2007,
+      "dispatch_date": "2026-04-22",
+      "delivery_address": "100 St Kilda Road, Melbourne VIC 3004",
+      "lat": -37.8216,
+      "lng": 144.9689,
+      "postcode": "3004",
+      "zone_code": "LOCAL",
+      "urgency": "URGENT",
+      "window_start": "08:00",
+      "window_end": "12:30",
+      "load_type": "ON_PALLET",
+      "kg_count": 190,
+      "pallet_count": 3,
+      "bag_count": 0
+    },
+    {
+      "order_id": 2008,
+      "dispatch_date": "2026-04-22",
+      "delivery_address": "1 Linlithgow Avenue, Melbourne VIC 3004",
+      "lat": -37.8305,
+      "lng": 144.9746,
+      "postcode": "3004",
+      "zone_code": "LOCAL",
+      "urgency": "NORMAL",
+      "window_start": "09:00",
+      "window_end": "14:00",
+      "load_type": "MIXED",
+      "kg_count": 95,
+      "pallet_count": 1,
+      "bag_count": 8
+    },
+    {
+      "order_id": 2009,
+      "dispatch_date": "2026-04-22",
+      "delivery_address": "452 St Kilda Road, Melbourne VIC 3004",
+      "lat": -37.8362,
+      "lng": 144.9721,
+      "postcode": "3004",
+      "zone_code": "LOCAL",
+      "urgency": "NORMAL",
+      "window_start": "10:30",
+      "window_end": "16:30",
+      "load_type": "LOOSE",
+      "kg_count": 68,
+      "pallet_count": 0,
+      "bag_count": 12
+    },
+    {
+      "order_id": 2010,
+      "dispatch_date": "2026-04-22",
+      "delivery_address": "180 St Kilda Road, Melbourne VIC 3006",
+      "lat": -37.8227,
+      "lng": 144.9684,
+      "postcode": "3006",
+      "zone_code": "LOCAL",
+      "urgency": "URGENT",
+      "window_start": "07:30",
+      "window_end": "11:00",
+      "load_type": "ON_PALLET",
+      "kg_count": 175,
+      "pallet_count": 2,
+      "bag_count": 0
+    },
+    {
+      "order_id": 2011,
+      "dispatch_date": "2026-04-22",
+      "delivery_address": "8 Whiteman Street, Southbank VIC 3006",
+      "lat": -37.8214,
+      "lng": 144.9574,
+      "postcode": "3006",
+      "zone_code": "LOCAL",
+      "urgency": "NORMAL",
+      "window_start": "09:30",
+      "window_end": "15:30",
+      "load_type": "MIXED",
+      "kg_count": 115,
+      "pallet_count": 1,
+      "bag_count": 9
+    },
+    {
+      "order_id": 2012,
+      "dispatch_date": "2026-04-22",
+      "delivery_address": "2 Southbank Boulevard, Southbank VIC 3006",
+      "lat": -37.8218,
+      "lng": 144.9651,
+      "postcode": "3006",
+      "zone_code": "LOCAL",
+      "urgency": "NORMAL",
+      "window_start": "11:00",
+      "window_end": "17:00",
+      "load_type": "MIXED",
+      "kg_count": 120,
+      "pallet_count": 1,
+      "bag_count": 8
+    },
+    {
+      "order_id": 2013,
+      "dispatch_date": "2026-04-22",
+      "delivery_address": "Elliott Avenue, Parkville VIC 3052",
+      "lat": -37.784,
+      "lng": 144.9514,
+      "postcode": "3052",
+      "zone_code": "LOCAL",
+      "urgency": "URGENT",
+      "window_start": "08:00",
+      "window_end": "13:30",
+      "load_type": "ON_PALLET",
+      "kg_count": 230,
+      "pallet_count": 3,
+      "bag_count": 0
+    },
+    {
+      "order_id": 2014,
+      "dispatch_date": "2026-04-22",
+      "delivery_address": "1 Royal Parade, Parkville VIC 3052",
+      "lat": -37.7957,
+      "lng": 144.9594,
+      "postcode": "3052",
+      "zone_code": "LOCAL",
+      "urgency": "NORMAL",
+      "window_start": "09:00",
+      "window_end": "14:30",
+      "load_type": "MIXED",
+      "kg_count": 108,
+      "pallet_count": 1,
+      "bag_count": 7
+    },
+    {
+      "order_id": 2015,
+      "dispatch_date": "2026-04-22",
+      "delivery_address": "300 Grattan Street, Parkville VIC 3052",
+      "lat": -37.7989,
+      "lng": 144.9552,
+      "postcode": "3052",
+      "zone_code": "LOCAL",
+      "urgency": "NORMAL",
+      "window_start": "10:30",
+      "window_end": "16:30",
+      "load_type": "LOOSE",
+      "kg_count": 72,
+      "pallet_count": 0,
+      "bag_count": 11
+    },
+    {
+      "order_id": 2016,
+      "dispatch_date": "2026-04-22",
+      "delivery_address": "1341 Dandenong Road, Chadstone VIC 3148",
+      "lat": -37.886,
+      "lng": 145.0836,
+      "postcode": "3148",
+      "zone_code": "SOUTH_EAST",
+      "urgency": "NORMAL",
+      "window_start": "09:00",
+      "window_end": "15:00",
+      "load_type": "ON_PALLET",
+      "kg_count": 220,
+      "pallet_count": 3,
+      "bag_count": 0
+    },
+    {
+      "order_id": 2017,
+      "dispatch_date": "2026-04-22",
+      "delivery_address": "1 Warrigal Road, Chadstone VIC 3148",
+      "lat": -37.8855,
+      "lng": 145.0838,
+      "postcode": "3148",
+      "zone_code": "SOUTH_EAST",
+      "urgency": "URGENT",
+      "window_start": "08:00",
+      "window_end": "12:00",
+      "load_type": "ON_PALLET",
+      "kg_count": 240,
+      "pallet_count": 3,
+      "bag_count": 0
+    },
+    {
+      "order_id": 2018,
+      "dispatch_date": "2026-04-22",
+      "delivery_address": "695 Warrigal Road, Chadstone VIC 3148",
+      "lat": -37.8769,
+      "lng": 145.0897,
+      "postcode": "3148",
+      "zone_code": "SOUTH_EAST",
+      "urgency": "NORMAL",
+      "window_start": "10:00",
+      "window_end": "16:30",
+      "load_type": "MIXED",
+      "kg_count": 125,
+      "pallet_count": 1,
+      "bag_count": 8
+    },
+    {
+      "order_id": 2019,
+      "dispatch_date": "2026-04-22",
+      "delivery_address": "50 Watton Street, Werribee VIC 3030",
+      "lat": -37.9002,
+      "lng": 144.6598,
+      "postcode": "3030",
+      "zone_code": "WEST",
+      "urgency": "NORMAL",
+      "window_start": "10:00",
+      "window_end": "17:30",
+      "load_type": "LOOSE",
+      "kg_count": 64,
+      "pallet_count": 0,
+      "bag_count": 12
+    },
+    {
+      "order_id": 2020,
+      "dispatch_date": "2026-04-22",
+      "delivery_address": "275 Princes Highway, Werribee VIC 3030",
+      "lat": -37.9008,
+      "lng": 144.6612,
+      "postcode": "3030",
+      "zone_code": "WEST",
+      "urgency": "NORMAL",
+      "window_start": "11:00",
+      "window_end": "18:00",
+      "load_type": "MIXED",
+      "kg_count": 132,
+      "pallet_count": 1,
+      "bag_count": 7
+    }
+  ],
+  "drivers": [
+    {
+      "driver_id": 1,
+      "shift_start": "08:00",
+      "shift_end": "17:00",
+      "is_available": true,
+      "start_location": "Depot",
+      "end_location": "Depot",
+      "preferred_zone_codes": [],
+      "historical_vehicle_ids": [],
+      "branch_no": "MEL",
+      "metadata": {
+        "name": "Epaminondas Tsatsoulis",
+        "license_no": "089140833",
+        "email": "nonda_tsatsoulis123@hotmail.com",
+        "phone_number": "0489854436",
+        "source": "driver master export"
+      }
+    },
+    {
+      "driver_id": 2,
+      "shift_start": "08:00",
+      "shift_end": "17:00",
+      "is_available": true,
+      "start_location": "Depot",
+      "end_location": "Depot",
+      "preferred_zone_codes": [],
+      "historical_vehicle_ids": [],
+      "branch_no": "MEL",
+      "metadata": {
+        "name": "Guanlin Li",
+        "license_no": "091843577",
+        "email": "guanlinx88@gmail.com",
+        "phone_number": "0455896888",
+        "source": "driver master export"
+      }
+    },
+    {
+      "driver_id": 3,
+      "shift_start": "08:00",
+      "shift_end": "17:00",
+      "is_available": true,
+      "start_location": "Depot",
+      "end_location": "Depot",
+      "preferred_zone_codes": [],
+      "historical_vehicle_ids": [],
+      "branch_no": "MEL",
+      "metadata": {
+        "name": "John Georgiadis",
+        "license_no": "048467870",
+        "email": "john50111@hotmail.com",
+        "phone_number": "0465988477",
+        "source": "driver master export"
+      }
+    },
+    {
+      "driver_id": 4,
+      "shift_start": "08:00",
+      "shift_end": "17:00",
+      "is_available": true,
+      "start_location": "Depot",
+      "end_location": "Depot",
+      "preferred_zone_codes": [],
+      "historical_vehicle_ids": [],
+      "branch_no": "MEL",
+      "metadata": {
+        "name": "Thomas L Ward",
+        "license_no": "022250292",
+        "email": "tom@teamsaustralia.com.au",
+        "phone_number": "0485222739",
+        "source": "driver master export"
+      }
+    },
+    {
+      "driver_id": 5,
+      "shift_start": "08:00",
+      "shift_end": "17:00",
+      "is_available": true,
+      "start_location": "Depot",
+      "end_location": "Depot",
+      "preferred_zone_codes": [],
+      "historical_vehicle_ids": [],
+      "branch_no": "MEL",
+      "metadata": {
+        "name": "Xiaoyan Fu",
+        "license_no": "054454692",
+        "email": "fushi56_fxy@126.com",
+        "phone_number": "0409620769",
+        "source": "driver master export"
+      }
+    },
+    {
+      "driver_id": 6,
+      "shift_start": "08:00",
+      "shift_end": "17:00",
+      "is_available": true,
+      "start_location": "Depot",
+      "end_location": "Depot",
+      "preferred_zone_codes": [],
+      "historical_vehicle_ids": [],
+      "branch_no": "MEL",
+      "metadata": {
+        "name": "Yong Fang",
+        "license_no": "089875085",
+        "email": "duephyfang@gmail.com",
+        "phone_number": "0430926662",
+        "source": "driver master export"
+      }
+    },
+    {
+      "driver_id": 7,
+      "shift_start": "08:00",
+      "shift_end": "17:00",
+      "is_available": true,
+      "start_location": "Depot",
+      "end_location": "Depot",
+      "preferred_zone_codes": [],
+      "historical_vehicle_ids": [],
+      "branch_no": "MEL",
+      "metadata": {
+        "name": "Yutong Wu",
+        "license_no": "036316530",
+        "email": "wyt2616@gmail.com",
+        "phone_number": "0421174611",
+        "source": "driver master export"
+      }
+    }
+  ],
+  "vehicles": [
+    {
+      "vehicle_id": 1,
+      "vehicle_type": "van",
+      "is_available": true,
+      "kg_capacity": 0,
+      "pallet_capacity": 3,
+      "tub_capacity": 6,
+      "trolley_capacity": 0,
+      "stillage_capacity": 0,
+      "metadata": {
+        "rego": "1HF8JY",
+        "source": "vehicle master export",
+        "raw_capacity": null,
+        "shelf_count": 0,
+        "fuel_card_shell": null,
+        "fuel_card_bp_plus": null,
+        "linkt_ref": null,
+        "service_period": null
+      }
+    },
+    {
+      "vehicle_id": 2,
+      "vehicle_type": "van",
+      "is_available": true,
+      "kg_capacity": 0,
+      "pallet_capacity": 3,
+      "tub_capacity": 6,
+      "trolley_capacity": 0,
+      "stillage_capacity": 0,
+      "metadata": {
+        "rego": "1KM8KM",
+        "source": "vehicle master export",
+        "raw_capacity": null,
+        "shelf_count": 0,
+        "fuel_card_shell": null,
+        "fuel_card_bp_plus": null,
+        "linkt_ref": null,
+        "service_period": null
+      }
+    },
+    {
+      "vehicle_id": 3,
+      "vehicle_type": "van",
+      "is_available": true,
+      "kg_capacity": 0,
+      "pallet_capacity": 3,
+      "tub_capacity": 6,
+      "trolley_capacity": 0,
+      "stillage_capacity": 0,
+      "metadata": {
+        "rego": "1SZ7KG",
+        "source": "vehicle master export",
+        "raw_capacity": null,
+        "shelf_count": 0,
+        "fuel_card_shell": null,
+        "fuel_card_bp_plus": null,
+        "linkt_ref": null,
+        "service_period": null
+      }
+    },
+    {
+      "vehicle_id": 4,
+      "vehicle_type": "van",
+      "is_available": true,
+      "kg_capacity": 0,
+      "pallet_capacity": 3,
+      "tub_capacity": 0,
+      "trolley_capacity": 0,
+      "stillage_capacity": 0,
+      "metadata": {
+        "rego": "2DO8MK",
+        "source": "vehicle master export",
+        "raw_capacity": null,
+        "shelf_count": 0,
+        "fuel_card_shell": null,
+        "fuel_card_bp_plus": null,
+        "linkt_ref": null,
+        "service_period": null
+      }
+    },
+    {
+      "vehicle_id": 5,
+      "vehicle_type": "van",
+      "is_available": true,
+      "kg_capacity": 0,
+      "pallet_capacity": 1,
+      "tub_capacity": 0,
+      "trolley_capacity": 0,
+      "stillage_capacity": 0,
+      "metadata": {
+        "rego": "2DOSLG",
+        "source": "vehicle master export",
+        "raw_capacity": null,
+        "shelf_count": 0,
+        "fuel_card_shell": null,
+        "fuel_card_bp_plus": null,
+        "linkt_ref": null,
+        "service_period": null
+      }
+    },
+    {
+      "vehicle_id": 6,
+      "vehicle_type": "small",
+      "is_available": true,
+      "kg_capacity": 0,
+      "pallet_capacity": 6,
+      "tub_capacity": 12,
+      "trolley_capacity": 15,
+      "stillage_capacity": 3,
+      "metadata": {
+        "rego": "XW36ID",
+        "source": "vehicle master export",
+        "raw_capacity": null,
+        "shelf_count": 0,
+        "fuel_card_shell": null,
+        "fuel_card_bp_plus": null,
+        "linkt_ref": null,
+        "service_period": null
+      }
+    },
+    {
+      "vehicle_id": 7,
+      "vehicle_type": "medium",
+      "is_available": true,
+      "kg_capacity": 0,
+      "pallet_capacity": 8,
+      "tub_capacity": 24,
+      "trolley_capacity": 18,
+      "stillage_capacity": 8,
+      "metadata": {
+        "rego": "XW97GH",
+        "source": "vehicle master export",
+        "raw_capacity": null,
+        "shelf_count": 0,
+        "fuel_card_shell": null,
+        "fuel_card_bp_plus": null,
+        "linkt_ref": null,
+        "service_period": null
+      }
+    },
+    {
+      "vehicle_id": 8,
+      "vehicle_type": "medium",
+      "is_available": true,
+      "kg_capacity": 0,
+      "pallet_capacity": 10,
+      "tub_capacity": 30,
+      "trolley_capacity": 21,
+      "stillage_capacity": 10,
+      "metadata": {
+        "rego": "XW22UT",
+        "source": "vehicle master export",
+        "raw_capacity": null,
+        "shelf_count": 0,
+        "fuel_card_shell": null,
+        "fuel_card_bp_plus": null,
+        "linkt_ref": null,
+        "service_period": null
+      }
+    },
+    {
+      "vehicle_id": 9,
+      "vehicle_type": "big",
+      "is_available": true,
+      "kg_capacity": 0,
+      "pallet_capacity": 14,
+      "tub_capacity": 42,
+      "trolley_capacity": 33,
+      "stillage_capacity": 14,
+      "metadata": {
+        "rego": "1AW4P1",
+        "source": "vehicle master export",
+        "raw_capacity": null,
+        "shelf_count": 0,
+        "fuel_card_shell": null,
+        "fuel_card_bp_plus": null,
+        "linkt_ref": null,
+        "service_period": null
+      }
+    }
+  ]
+}

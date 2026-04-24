@@ -1,0 +1,10 @@
+rego,vehicle_type,capacity,tub_capacity,pallet_capacity,trolley_capacity,stillage_capacity,shelf_count,fuel_card_shell,fuel_card_bp_plus,linkt_ref,service_period
+1HF8JY,van,,6,3,0,0,0,,,,
+1KM8KM,van,,6,3,0,0,0,,,,
+1SZ7KG,van,,6,3,0,0,0,,,,
+2DO8MK,van,,0,3,0,0,0,,,,
+2DOSLG,van,,0,1,0,0,0,,,,
+XW36ID,small,,12,6,15,3,0,,,,
+XW97GH,medium,,24,8,18,8,0,,,,
+XW22UT,medium,,30,10,21,10,0,,,,
+1AW4P1,big,,42,14,33,14,0,,,,

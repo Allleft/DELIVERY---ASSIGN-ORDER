@@ -1,0 +1,189 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dispatch Workbench</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Delivery Dispatch Workbench</p>
+        <h1>订单分配工作台</h1>
+        <p class="hero-copy">业务人员可直接在表格中维护订单、司机、车辆并生成派单结果。底层 JSON 与调度逻辑保持不变。</p>
+      </div>
+      <div class="hero-actions">
+        <button id="loadSampleBtn" class="button button-secondary">加载样例</button>
+        <button id="runPlannerBtn" class="button button-primary">生成计划</button>
+        <button id="exportSnapshotBtn" class="button button-ghost">导出 Snapshot</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="panel panel-input">
+        <div class="panel-heading">
+          <h2>输入工作台</h2>
+          <p>默认使用表格编辑，避免手写 JSON。高级设置和开发者模式可按需展开。</p>
+        </div>
+
+        <article class="editor-card">
+          <div class="editor-title-row">
+            <h3>Orders</h3>
+            <div class="table-actions">
+              <button id="addOrderBtn" class="button button-mini">新增订单</button>
+              <button id="importOrdersBtn" class="button button-mini button-ghost">导入 CSV / Excel</button>
+              <input id="orderCsvInput" type="file" accept=".csv,.xlsx" class="hidden" />
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="workbench-table" id="ordersTable">
+              <thead>
+                <tr>
+                  <th>order_id</th>
+                  <th>dispatch_date</th>
+                  <th>delivery_address</th>
+                  <th>postcode</th>
+                  <th>zone</th>
+                  <th>urgency</th>
+                  <th>preferred_driver_id</th>
+                  <th>pallet_qty</th>
+                  <th>loose_bags</th>
+                  <th>window_start</th>
+                  <th>window_end</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="ordersTableBody"></tbody>
+            </table>
+          </div>
+          <div id="orderImportReport" class="hint"></div>
+        </article>
+
+        <article class="editor-card">
+          <div class="editor-title-row">
+            <h3>Drivers</h3>
+            <button id="addDriverBtn" class="button button-mini">新增司机</button>
+          </div>
+          <div class="table-wrap">
+            <table class="workbench-table" id="driversTable">
+              <thead>
+                <tr>
+                  <th>driver_id</th>
+                  <th>name</th>
+                  <th>shift_start</th>
+                  <th>shift_end</th>
+                  <th>is_available</th>
+                  <th>preferred_zone_codes</th>
+                  <th>start_location</th>
+                  <th>end_location</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="driversTableBody"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="editor-card">
+          <div class="editor-title-row">
+            <h3>Vehicles</h3>
+            <div class="table-actions">
+              <span id="vehiclesCountBadge" class="pill">0 台</span>
+              <button id="addVehicleBtn" class="button button-mini">新增车辆</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="workbench-table" id="vehiclesTable">
+              <thead>
+                <tr>
+                  <th>vehicle_id</th>
+                  <th>rego</th>
+                  <th>vehicle_type</th>
+                  <th>is_available</th>
+                  <th>kg_capacity</th>
+                  <th>pallet_capacity</th>
+                  <th>tub_capacity</th>
+                  <th>trolley_capacity</th>
+                  <th>stillage_capacity</th>
+                  <th>source</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="vehiclesTableBody"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <details class="editor-card" id="advancedConfigPanel">
+          <summary class="summary-toggle">高级设置（Config）</summary>
+          <div class="config-grid">
+            <label>bucket_minutes<input id="cfgBucketMinutes" type="number" min="1" /></label>
+            <label>loose_units_per_tub<input id="cfgLooseUnitsPerTub" type="number" min="1" /></label>
+            <label>average_speed_kph<input id="cfgAverageSpeed" type="number" min="1" /></label>
+            <label>minimum_travel_minutes<input id="cfgMinTravel" type="number" min="1" /></label>
+            <label>max_repair_iterations<input id="cfgMaxRepair" type="number" min="0" /></label>
+          </div>
+          <p class="hint">完整 config JSON 可在“开发者模式”里查看和编辑。</p>
+        </details>
+      </section>
+
+      <section class="panel panel-output">
+        <div class="panel-heading">
+          <h2>输出结果</h2>
+          <p>默认主视图聚焦 Driver / Vehicle / Orders；分组明细保留在次级区域用于排查。</p>
+        </div>
+
+        <div class="summary-strip">
+          <div class="summary-card"><span class="summary-label">Groups</span><strong id="plansCount">0</strong></div>
+          <div class="summary-card"><span class="summary-label">Order Assignments</span><strong id="assignmentsCount">0</strong></div>
+          <div class="summary-card"><span class="summary-label">Exceptions</span><strong id="exceptionsCount">0</strong></div>
+          <div class="summary-card"><span class="summary-label">Assigned Drivers</span><strong id="assignedDrivers">0</strong></div>
+        </div>
+
+        <div id="messageBanner" class="message-banner hidden"></div>
+        <div id="validationPanel" class="validation-panel hidden"></div>
+
+        <div class="output-stack">
+          <article class="output-card">
+            <div class="editor-title-row"><h3>Driver Assignment Summary</h3><span class="pill">order_assignments + plans</span></div>
+            <div id="orderAssignmentsContainer" class="empty-state">生成计划后，这里按司机 -> 车辆 -> 订单展示最终分配。</div>
+          </article>
+
+          <article class="output-card">
+            <div class="editor-title-row"><h3>Exceptions</h3><span class="pill pill-warn">exceptions</span></div>
+            <div id="exceptionsContainer" class="exceptions-list empty-state">当前还没有异常。</div>
+          </article>
+
+          <article class="output-card">
+            <div class="editor-title-row"><h3>Assignment Groups (Secondary)</h3><span class="pill pill-accent">plans</span></div>
+            <div id="plansContainer" class="plans-list empty-state">生成计划后，这里会显示分组分配摘要。</div>
+          </article>
+
+          <details class="output-card" id="developerModePanel">
+            <summary class="summary-toggle">开发者模式（整包 JSON）</summary>
+            <div class="dev-actions">
+              <button id="syncSnapshotBtn" class="button button-mini">从表格生成 JSON</button>
+              <button id="applySnapshotBtn" class="button button-mini button-ghost">用 JSON 回填表格</button>
+            </div>
+            <textarea id="snapshotEditor" class="dev-json" spellcheck="false"></textarea>
+            <div class="editor-title-row"><h3>Result JSON</h3><span class="pill">result</span></div>
+            <pre id="resultJson" class="result-json">{
+  "plans": [],
+  "order_assignments": [],
+  "exceptions": []
+}</pre>
+          </details>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="./modules/zone-utils.js?v=20260422-zone-utils-split-pass3" defer></script>
+  <script src="./modules/driver-assignment-summary.js?v=20260422-driver-summary-split-pass2" defer></script>
+  <script src="./modules/render-utils.js?v=20260424-render-utils-pass4" defer></script>
+  <script src="./app.js?v=20260422-orders50-no-service" defer></script>
+  <script src="./overrides.js?v=20260422-driver-name-visible" defer></script>
+</body>
+</html>
