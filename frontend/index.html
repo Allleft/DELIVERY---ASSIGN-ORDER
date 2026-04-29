@@ -11,29 +11,29 @@
     <header class="hero">
       <div>
         <p class="eyebrow">Delivery Dispatch Workbench</p>
-        <h1>订单分配工作台</h1>
-        <p class="hero-copy">业务人员可直接在表格中维护订单、司机、车辆并生成派单结果。底层 JSON 与调度逻辑保持不变。</p>
+        <h1>Dispatch Assignment Workbench</h1>
+        <p class="hero-copy">Business users can maintain orders, drivers, and vehicles in tables and generate dispatch results. Underlying JSON and dispatch logic remain unchanged.</p>
       </div>
       <div class="hero-actions">
-        <button id="loadSampleBtn" class="button button-secondary">加载样例</button>
-        <button id="runPlannerBtn" class="button button-primary">生成计划</button>
-        <button id="exportSnapshotBtn" class="button button-ghost">导出 Snapshot</button>
+          <button id="loadSampleBtn" class="button button-secondary">Load Sample</button>
+          <button id="runPlannerBtn" class="button button-primary">Generate Plan</button>
+          <button id="exportSnapshotBtn" class="button button-ghost">Export Snapshot</button>
       </div>
     </header>
 
     <main class="workspace">
       <section class="panel panel-input">
         <div class="panel-heading">
-          <h2>输入工作台</h2>
-          <p>默认使用表格编辑，避免手写 JSON。高级设置和开发者模式可按需展开。</p>
+          <h2>Input Workbench</h2>
+          <p>Use table editing by default to avoid manual JSON edits. Expand Advanced Settings and Developer Mode when needed.</p>
         </div>
 
         <article class="editor-card">
           <div class="editor-title-row">
             <h3>Orders</h3>
             <div class="table-actions">
-              <button id="addOrderBtn" class="button button-mini">新增订单</button>
-              <button id="importOrdersBtn" class="button button-mini button-ghost">导入 CSV / Excel</button>
+              <button id="addOrderBtn" class="button button-mini">Add Order</button>
+              <button id="importOrdersBtn" class="button button-mini button-ghost">Import CSV / Excel</button>
               <input id="orderCsvInput" type="file" accept=".csv,.xlsx" class="hidden" />
             </div>
           </div>
@@ -64,7 +64,7 @@
         <article class="editor-card">
           <div class="editor-title-row">
             <h3>Drivers</h3>
-            <button id="addDriverBtn" class="button button-mini">新增司机</button>
+            <button id="addDriverBtn" class="button button-mini">Add Driver</button>
           </div>
           <div class="table-wrap">
             <table class="workbench-table" id="driversTable">
@@ -90,8 +90,8 @@
           <div class="editor-title-row">
             <h3>Vehicles</h3>
             <div class="table-actions">
-              <span id="vehiclesCountBadge" class="pill">0 台</span>
-              <button id="addVehicleBtn" class="button button-mini">新增车辆</button>
+              <span id="vehiclesCountBadge" class="pill">0 vehicles</span>
+              <button id="addVehicleBtn" class="button button-mini">Add Vehicle</button>
             </div>
           </div>
           <div class="table-wrap">
@@ -117,7 +117,7 @@
         </article>
 
         <details class="editor-card" id="advancedConfigPanel">
-          <summary class="summary-toggle">高级设置（Config）</summary>
+          <summary class="summary-toggle">Advanced Settings (Config)</summary>
           <div class="config-grid">
             <label>bucket_minutes<input id="cfgBucketMinutes" type="number" min="1" /></label>
             <label>loose_units_per_tub<input id="cfgLooseUnitsPerTub" type="number" min="1" /></label>
@@ -125,14 +125,14 @@
             <label>minimum_travel_minutes<input id="cfgMinTravel" type="number" min="1" /></label>
             <label>max_repair_iterations<input id="cfgMaxRepair" type="number" min="0" /></label>
           </div>
-          <p class="hint">完整 config JSON 可在“开发者模式”里查看和编辑。</p>
+          <p class="hint">You can view and edit the full config JSON in Developer Mode.</p>
         </details>
       </section>
 
       <section class="panel panel-output">
         <div class="panel-heading">
-          <h2>输出结果</h2>
-          <p>默认主视图聚焦 Driver / Vehicle / Orders；分组明细保留在次级区域用于排查。</p>
+          <h2>Output</h2>
+          <p>The default primary view focuses on Driver / Vehicle / Orders; grouped details remain in the secondary area for troubleshooting.</p>
         </div>
 
         <div class="summary-strip">
@@ -148,24 +148,24 @@
         <div class="output-stack">
           <article class="output-card">
             <div class="editor-title-row"><h3>Driver Assignment Summary</h3><span class="pill">order_assignments + plans</span></div>
-            <div id="orderAssignmentsContainer" class="empty-state">生成计划后，这里按司机 -> 车辆 -> 订单展示最终分配。</div>
+            <div id="orderAssignmentsContainer" class="empty-state">After generating a plan, final assignments are shown here as Driver -> Vehicle -> Orders.</div>
           </article>
 
           <article class="output-card">
             <div class="editor-title-row"><h3>Exceptions</h3><span class="pill pill-warn">exceptions</span></div>
-            <div id="exceptionsContainer" class="exceptions-list empty-state">当前还没有异常。</div>
+            <div id="exceptionsContainer" class="exceptions-list empty-state">No exceptions yet.</div>
           </article>
 
           <article class="output-card">
             <div class="editor-title-row"><h3>Assignment Groups (Secondary)</h3><span class="pill pill-accent">plans</span></div>
-            <div id="plansContainer" class="plans-list empty-state">生成计划后，这里会显示分组分配摘要。</div>
+            <div id="plansContainer" class="plans-list empty-state">After generating a plan, grouped assignment summaries are shown here.</div>
           </article>
 
           <details class="output-card" id="developerModePanel">
-            <summary class="summary-toggle">开发者模式（整包 JSON）</summary>
+            <summary class="summary-toggle">Developer Mode (Full JSON)</summary>
             <div class="dev-actions">
-              <button id="syncSnapshotBtn" class="button button-mini">从表格生成 JSON</button>
-              <button id="applySnapshotBtn" class="button button-mini button-ghost">用 JSON 回填表格</button>
+              <button id="syncSnapshotBtn" class="button button-mini">Generate JSON from Tables</button>
+              <button id="applySnapshotBtn" class="button button-mini button-ghost">Apply JSON to Tables</button>
             </div>
             <textarea id="snapshotEditor" class="dev-json" spellcheck="false"></textarea>
             <div class="editor-title-row"><h3>Result JSON</h3><span class="pill">result</span></div>

@@ -1,7 +1,7 @@
 # Dispatch Optimizer Optimization Plan (Phase 0–2 Only)
 
 ## Goal
-完成结构优化工作的前置准备（Phase 0/1/2），建立可追踪的计划与基线，不修改业务逻辑。
+Complete the preparation work for structural optimization (Phase 0/1/2), establish traceable planning and baselines, and do not modify business logic.
 
 ## Status
 - Phase 0: complete

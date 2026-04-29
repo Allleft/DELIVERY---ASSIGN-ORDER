@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import unittest
 from pathlib import Path
@@ -8,32 +8,32 @@ class ProjectGovernanceTest(unittest.TestCase):
     def test_readme_contains_required_contract_sections(self) -> None:
         text = Path("README.md").read_text(encoding="utf-8")
         markers = [
-            "## 1. 项目概览",
-            "## 2. 项目主流程",
-            "## 3. 目录结构说明",
-            "## 4. 关键文件/模块说明",
-            "## 5. 数据来源与主数据流",
-            "## 6. 前端说明",
-            "## 7. 调度算法说明",
-            "## 8. 配置与运行方式",
-            "## 9. 当前重要规则与约束",
-            "## 10. 已知边界 / 注意事项",
+            "## 1. Project Overview",
+            "## 2. Project Main Flow",
+            "## 3. Directory Structure",
+            "## 4. Key Files / Modules",
+            "## 5. Data Sources and Master Data Flow",
+            "## 6. Frontend Notes",
+            "## 7. Dispatch Algorithm Notes",
+            "## 8. Configuration and Run Commands",
+            "## 9. Important Rules and Constraints",
+            "## 10. Known Boundaries / Notes",
             "`plans / order_assignments / exceptions`",
             "postcode + zone_code",
             "preferred_zone_codes",
             "POSTCODE_NOT_MAPPED",
-            "`service_minutes` 已从输入模型移除",
+            "`service_minutes` has been removed from input",
             "Google Routes API",
             "cache first -> Google Routes -> Haversine fallback",
             "vehicle_switch_penalty",
             "Driver Assignment Summary",
             "Assignment Groups (Secondary)",
             "Driver -> Vehicle -> Orders",
-            "`tools/refresh_sample_master_data.py` 只覆盖 `drivers` 与 `vehicles`",
-            "Front page 首屏默认 `orders` 为空",
-            "输入形状兼容：扁平 config 顶层键 + `config` 包裹",
-            "dispatch_optimizer/*.py` 多数是 façade，真实实现在 `*_core.py`",
-            "`frontend/overrides.js` 仅兼容 shim",
+            "`tools/refresh_sample_master_data.py` only updates `drivers` and `vehicles`",
+            "front page starts with empty `orders`",
+            "compatible with both flat config top-level keys and nested `config`",
+            "Most `dispatch_optimizer/*.py` are façade files; implementation is in `*_core.py`",
+            "`frontend/overrides.js`",
             "tools/recycle.ps1",
             "trip grouping + assignment",
             "hard constraints -> urgent coverage -> preferred-zone match -> minimize driver-day zone spread -> same-day vehicle minimization -> assignment coverage -> used drivers / balance / normal objective",
@@ -41,7 +41,7 @@ class ProjectGovernanceTest(unittest.TestCase):
             "DRIVER_UNUSED_NO_FEASIBLE_CANDIDATE",
             "Plan ID Migration (2026-04-23)",
             "`order_assignments[*]` is linked by the same `plan_id`",
-            "detailed routing 不再是主输出",
+            "detailed routing is no longer the primary output",
         ]
         for marker in markers:
             self.assertIn(marker, text)

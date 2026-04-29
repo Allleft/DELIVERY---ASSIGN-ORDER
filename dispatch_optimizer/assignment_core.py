@@ -479,6 +479,17 @@ class AssignmentSolver:
             if best_total_switch_proxy is None:
                 return self._solve_greedily(candidates, context)
 
+        designated_indices = [
+            idx
+            for idx, candidate in enumerate(candidates)
+            if context.runs_by_id[candidate.run_id].designated_driver_id is not None
+        ]
+        if designated_indices:
+            designated_expr = sum(variables[idx] for idx in designated_indices)
+            best_designated_coverage = self._lock_stage_or_none(model, designated_expr, maximize=True)
+            if best_designated_coverage is None:
+                return self._solve_greedily(candidates, context)
+
         assigned_runs_expr = sum(variables[idx] for idx in range(len(candidates)))
         best_assigned_runs = self._lock_stage_or_none(model, assigned_runs_expr, maximize=True)
         if best_assigned_runs is None:

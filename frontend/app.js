@@ -1,4 +1,4 @@
-const FIXED_STOP_MINUTES = 10;
+﻿const FIXED_STOP_MINUTES = 10;
 
 const VEHICLE_SEED = [
   [1, "1HF8JY", "van", 0, 3, 6, 0, 0],
@@ -115,7 +115,7 @@ function bootstrap() {
   appState.result = deepClone(EMPTY_RESULT);
   renderResult(appState.result);
   setImportReport("");
-  banner("当前订单为空，请手动新增订单或导入 CSV；司机和车辆已直接展示。", "info");
+  banner("No orders yet. Add orders manually or import CSV; drivers and vehicles are already displayed.", "info");
 }
 
 function bindEvents() {
@@ -549,7 +549,7 @@ function createEmptyValidation() {
 
 function normalizeSnapshotShape(rawSnapshot) {
   if (!isObject(rawSnapshot)) {
-    throw new Error("Snapshot 必须是 JSON 对象。");
+    throw new Error("Snapshot must be a JSON object.");
   }
   const config = isObject(rawSnapshot.config) ? rawSnapshot.config : extractLegacyConfig(rawSnapshot);
   return {
@@ -696,8 +696,8 @@ function snapshotToViewModel(snapshot) {
       if (driver.preferred_zone_ids.length > 0) {
         compatibilityNotes.push(
           preferredCodes.length > 0
-            ? `司机第 ${index + 1} 行：preferred_zone_ids 已转换为 preferred_zone_codes。`
-            : `司机第 ${index + 1} 行：preferred_zone_ids 无法转换，已置空。`
+            ? `Driver row ${index + 1}: preferred_zone_ids converted to preferred_zone_codes.`
+            : `Driver row ${index + 1}: preferred_zone_ids could not be converted and was cleared.`
         );
       }
     }
@@ -845,7 +845,7 @@ function loadSampleData() {
   appState.result = deepClone(EMPTY_RESULT);
   renderResult(appState.result);
   setImportReport("");
-  banner("样例数据已加载，可直接生成计划。", "info");
+  banner("Sample data loaded. You can generate a plan now.", "info");
 }
 
 function renderWorkbench() {
@@ -887,12 +887,12 @@ function renderOrdersTable() {
               <option value="URGENT" ${row.urgency === "URGENT" ? "selected" : ""}>URGENT</option>
             </select>
           </td>
-          <td><input data-field="preferred_driver_id" value="${escapeHtml(asText(row.preferred_driver_id))}" placeholder="可选" /></td>
+          <td><input data-field="preferred_driver_id" value="${escapeHtml(asText(row.preferred_driver_id))}" placeholder="Optional" /></td>
           <td><input data-field="pallet_qty" type="number" min="0" value="${escapeHtml(asText(row.pallet_qty))}" /></td>
           <td><input data-field="loose_bags" type="number" min="0" value="${escapeHtml(asText(row.loose_bags))}" /></td>
           <td><input data-field="window_start" value="${escapeHtml(asText(row.window_start))}" /></td>
           <td><input data-field="window_end" value="${escapeHtml(asText(row.window_end))}" /></td>
-          <td><button class="button button-mini button-danger" data-action="delete-order" data-index="${index}">删除</button></td>
+          <td><button class="button button-mini button-danger" data-action="delete-order" data-index="${index}">Delete</button></td>
         </tr>
       `;
     })
@@ -916,7 +916,7 @@ function renderDriversTable() {
           <td><input data-field="preferred_zone_codes" value="${escapeHtml(asText(row.preferred_zone_codes))}" placeholder="LOCAL,WEST" /></td>
           <td><input data-field="start_location" value="${escapeHtml(asText(row.start_location))}" /></td>
           <td><input data-field="end_location" value="${escapeHtml(asText(row.end_location))}" /></td>
-          <td><button class="button button-mini button-danger" data-action="delete-driver" data-index="${index}">删除</button></td>
+          <td><button class="button button-mini button-danger" data-action="delete-driver" data-index="${index}">Delete</button></td>
         </tr>
       `;
     })
@@ -942,13 +942,13 @@ function renderVehiclesTable() {
           <td><input data-field="trolley_capacity" type="number" min="0" value="${escapeHtml(asText(row.trolley_capacity))}" /></td>
           <td><input data-field="stillage_capacity" type="number" min="0" value="${escapeHtml(asText(row.stillage_capacity))}" /></td>
           <td><input data-field="source" value="${escapeHtml(asText(row.source))}" /></td>
-          <td><button class="button button-mini button-danger" data-action="delete-vehicle" data-index="${index}">删除</button></td>
+          <td><button class="button button-mini button-danger" data-action="delete-vehicle" data-index="${index}">Delete</button></td>
         </tr>
       `;
     })
     .join("");
   const badge = get("vehiclesCountBadge");
-  if (badge) badge.textContent = `${appState.view.vehicles.length} 台`;
+  if (badge) badge.textContent = `${appState.view.vehicles.length} vehicles`;
 }
 
 function handleAddOrder() {
@@ -1048,18 +1048,18 @@ function validateViewModel(view, options = { normalize: false }) {
   for (let index = 0; index < view.orders.length; index += 1) {
     const row = view.orders[index];
     if (isBlank(row.delivery_address)) {
-      report.errors.push(`Orders 第 ${index + 1} 行：delivery_address 不能为空。`);
+      report.errors.push(`Orders row ${index + 1}: delivery_address is required.`);
       report.rowErrors.orders.add(index);
     }
     const postcode = asText(row.postcode).trim();
     if (postcode === "") {
-      report.errors.push(`Orders 第 ${index + 1} 行：postcode 不能为空。`);
+      report.errors.push(`Orders row ${index + 1}: postcode is required.`);
       report.rowErrors.orders.add(index);
       continue;
     }
     const mappedZone = resolveZoneCodeByPostcode(postcode, view.config._extra?.zone_by_postcode || {});
     if (!mappedZone) {
-      report.errors.push(`Orders 第 ${index + 1} 行：postcode 未命中 zone 映射。`);
+      report.errors.push(`Orders row ${index + 1}: postcode did not map to a zone.`);
       report.rowErrors.orders.add(index);
       continue;
     }
@@ -1068,7 +1068,7 @@ function validateViewModel(view, options = { normalize: false }) {
     const start = parseTimeToMinutes(row.window_start);
     const end = parseTimeToMinutes(row.window_end);
     if (start === null || end === null || start >= end) {
-      report.errors.push(`Orders 第 ${index + 1} 行：window_start / window_end 无效。`);
+      report.errors.push(`Orders row ${index + 1}: window_start / window_end is invalid.`);
       report.rowErrors.orders.add(index);
     }
     if (normalize) {
@@ -1086,12 +1086,12 @@ function validateViewModel(view, options = { normalize: false }) {
     const start = parseTimeToMinutes(row.shift_start);
     const end = parseTimeToMinutes(row.shift_end);
     if (start === null || end === null || start >= end) {
-      report.errors.push(`Drivers 第 ${index + 1} 行：shift_start / shift_end 无效。`);
+      report.errors.push(`Drivers row ${index + 1}: shift_start / shift_end is invalid.`);
       report.rowErrors.drivers.add(index);
     }
     const zoneParse = parseZoneList(row.preferred_zone_codes);
     if (zoneParse.invalid) {
-      report.errors.push(`Drivers 第 ${index + 1} 行：preferred_zone_codes 仅支持逗号分隔编码。`);
+      report.errors.push(`Drivers row ${index + 1}: preferred_zone_codes only supports comma-separated zone codes.`);
       report.rowErrors.drivers.add(index);
     } else if (normalize) {
       row.preferred_zone_codes = zoneParse.values.join(",");
@@ -1117,25 +1117,25 @@ function handleSyncSnapshotJson() {
   renderValidationPanel(report);
   renderWorkbench();
   if (report.errors.length > 0) {
-    banner("存在阻断错误，无法生成 JSON。请先修复高亮行。", "error");
+    banner("Blocking errors found. Cannot generate JSON. Please fix highlighted rows first.", "error");
     return;
   }
   appState.snapshot = viewModelToSnapshot(appState.view);
   renderSnapshotEditor();
-  banner("已从表格生成最新 Snapshot JSON。", "success");
+  banner("Snapshot JSON synchronized from tables.", "success");
 }
 
 function handleApplySnapshotJson() {
   const raw = asText(get("snapshotEditor")?.value).trim();
   if (!raw) {
-    banner("开发者模式 JSON 为空，无法回填。", "error");
+    banner("Developer mode JSON is empty. Cannot apply.", "error");
     return;
   }
   try {
     applySnapshotToState(JSON.parse(raw));
-    banner("已根据 JSON 回填表格。", "success");
+    banner("Applied JSON back to tables.", "success");
   } catch (error) {
-    banner(`JSON 回填失败：${error.message}`, "error");
+    banner(`Failed to apply JSON: ${error.message}`, "error");
   }
 }
 
@@ -1145,7 +1145,7 @@ function handleExportSnapshot() {
   renderValidationPanel(report);
   renderWorkbench();
   if (report.errors.length > 0) {
-    banner("存在阻断错误，无法导出 Snapshot。", "error");
+    banner("Blocking errors found. Cannot export Snapshot.", "error");
     return;
   }
   appState.snapshot = viewModelToSnapshot(appState.view);
@@ -1159,7 +1159,7 @@ function handleExportSnapshot() {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
-  banner("Snapshot 已导出。", "success");
+  banner("Snapshot exported.", "success");
 }
 
 function handleRunPlanner() {
@@ -1168,16 +1168,16 @@ function handleRunPlanner() {
   renderValidationPanel(report);
   renderWorkbench();
   if (report.errors.length > 0) {
-    banner(`存在 ${report.errors.length} 条阻断错误，无法生成计划。`, "error");
+    banner(`Found ${report.errors.length} blocking error(s). Cannot generate plan.`, "error");
     return;
   }
   appState.snapshot = viewModelToSnapshot(appState.view);
   renderSnapshotEditor();
   appState.result = planDispatch(appState.snapshot);
   renderResult(appState.result);
-  const warningSuffix = report.warnings.length > 0 ? `，并自动规范了 ${report.warnings.length} 处输入` : "";
+  const warningSuffix = report.warnings.length > 0 ? ` and auto-normalized ${report.warnings.length} input value(s)` : "";
   banner(
-    `已生成 ${appState.result.plans.length} 个计划，订单分配 ${appState.result.order_assignments.length} 条，异常 ${appState.result.exceptions.length} 条${warningSuffix}。`,
+    `Generated ${appState.result.plans.length} plan(s), ${appState.result.order_assignments.length} order assignment(s), ${appState.result.exceptions.length} exception(s)${warningSuffix}.`,
     "success"
   );
 }
@@ -1189,25 +1189,25 @@ function normalizePlannerInput(snapshot) {
   const orders = safeArray(snapshot.orders)
     .map((order) => {
       if (isBlank(order.delivery_address)) {
-        exceptions.push(makeException("ORDER", order.order_id, "MISSING_ADDRESS", "订单缺少 delivery_address。", "请补齐地址。", normalizeUrgency(order.urgency) === "URGENT"));
+        exceptions.push(makeException("ORDER", order.order_id, "MISSING_ADDRESS", "Order is missing delivery_address.", "Please provide a valid delivery address.", normalizeUrgency(order.urgency) === "URGENT"));
         return null;
       }
       const postcode = asText(order.postcode).trim();
       const mappedZoneCode = resolveZoneCodeByPostcode(postcode, config.zone_by_postcode);
       const zoneCode = mappedZoneCode;
       if (!zoneCode) {
-        exceptions.push(makeException("ORDER", order.order_id, "POSTCODE_NOT_MAPPED", "No zone mapping found for postcode.", "请补充 postcode 或完善 zone_by_postcode 映射。", normalizeUrgency(order.urgency) === "URGENT"));
+        exceptions.push(makeException("ORDER", order.order_id, "POSTCODE_NOT_MAPPED", "No zone mapping found for postcode.", "Please provide postcode or update zone_by_postcode mapping.", normalizeUrgency(order.urgency) === "URGENT"));
         return null;
       }
       const windowStart = parseTimeToMinutes(order.window_start);
       const windowEnd = parseTimeToMinutes(order.window_end);
       if (windowStart === null || windowEnd === null || windowStart >= windowEnd) {
-        exceptions.push(makeException("ORDER", order.order_id, "INVALID_TIME_WINDOW", "订单时间窗无效。", "请修正窗口时间。", normalizeUrgency(order.urgency) === "URGENT"));
+        exceptions.push(makeException("ORDER", order.order_id, "INVALID_TIME_WINDOW", "Order time window is invalid.", "Please correct window_start/window_end.", normalizeUrgency(order.urgency) === "URGENT"));
         return null;
       }
       const location = resolveLocation(order.delivery_address, order.lat, order.lng, config.geocoder);
       if (!location) {
-        exceptions.push(makeException("ORDER", order.order_id, "MISSING_COORDINATES", "订单地址无法解析坐标。", "请在 geocoder 中维护地址坐标或提供 lat/lng。", normalizeUrgency(order.urgency) === "URGENT"));
+        exceptions.push(makeException("ORDER", order.order_id, "MISSING_COORDINATES", "Order address could not be geocoded.", "Maintain coordinates in geocoder or provide lat/lng.", normalizeUrgency(order.urgency) === "URGENT"));
         return null;
       }
       return {
@@ -1235,13 +1235,13 @@ function normalizePlannerInput(snapshot) {
       const shiftStart = parseTimeToMinutes(driver.shift_start);
       const shiftEnd = parseTimeToMinutes(driver.shift_end);
       if (shiftStart === null || shiftEnd === null || shiftStart >= shiftEnd) {
-        exceptions.push(makeException("DRIVER", driver.driver_id, "INVALID_SHIFT", "司机班次时间无效。", "请检查 shift_start / shift_end。"));
+        exceptions.push(makeException("DRIVER", driver.driver_id, "INVALID_SHIFT", "Driver shift window is invalid.", "Please check shift_start / shift_end."));
         return null;
       }
       const startRef = resolveDriverRef(driver.start_location, driver.start_lat, driver.start_lng, driver.branch_no, config);
       const endRef = resolveDriverRef(driver.end_location, driver.end_lat, driver.end_lng, driver.branch_no, config);
       if (!startRef || !endRef) {
-        exceptions.push(makeException("DRIVER", driver.driver_id, "MISSING_DRIVER_LOCATION", "司机缺少可解析起终点。", "请补充起终点地址或 branch_locations。"));
+        exceptions.push(makeException("DRIVER", driver.driver_id, "MISSING_DRIVER_LOCATION", "Driver start/end location cannot be resolved.", "Please provide start/end location or branch_locations."));
         return null;
       }
       const preferredZoneCodes = Array.isArray(driver.preferred_zone_codes)
@@ -1285,10 +1285,10 @@ function normalizePlannerInput(snapshot) {
     .filter((vehicle) => vehicle && vehicle.is_available);
 
   if (drivers.length === 0) {
-    exceptions.push(makeException("SYSTEM", "drivers", "NO_AVAILABLE_DRIVERS", "当前没有可用司机。", "请检查司机可用状态与班次。"));
+    exceptions.push(makeException("SYSTEM", "drivers", "NO_AVAILABLE_DRIVERS", "No available drivers.", "Please check driver availability and shifts."));
   }
   if (vehicles.length === 0) {
-    exceptions.push(makeException("SYSTEM", "vehicles", "NO_AVAILABLE_VEHICLES", "当前没有可用车辆。", "请检查车辆可用状态。"));
+    exceptions.push(makeException("SYSTEM", "vehicles", "NO_AVAILABLE_VEHICLES", "No available vehicles.", "Please check vehicle availability."));
   }
 
   return { config, orders, drivers, vehicles, exceptions };
@@ -1476,8 +1476,8 @@ function planDispatch(snapshot) {
           "GROUP",
           groupEntityId(group),
           "DESIGNATED_DRIVER_UNAVAILABLE",
-          "存在指定司机，但该司机当前不可用。",
-          "调整指定司机限制或改为人工调度。",
+          "A designated driver exists, but that driver is currently unavailable.",
+          "Relax designated-driver constraints or switch to manual dispatch.",
           group.urgent_count > 0,
           { order_ids: group.orders.map((order) => order.order_id), dispatch_date: group.dispatch_date, zone_code: group.zone_code }
         )
@@ -1534,8 +1534,8 @@ function planDispatch(snapshot) {
           "GROUP",
           groupEntityId(group),
           "NO_FEASIBLE_ASSIGNMENT",
-          "没有任何司机-车辆组合可满足 trip 的容量与粗粒度时间约束。",
-          "请补充资源或放宽约束后重试。",
+          "No driver-vehicle combination can satisfy this trip's capacity and coarse time constraints.",
+          "Add resources or relax constraints, then retry.",
           group.urgent_count > 0,
           { order_ids: group.orders.map((order) => order.order_id), dispatch_date: group.dispatch_date, zone_code: group.zone_code }
         )
@@ -1600,8 +1600,8 @@ function planDispatch(snapshot) {
           "GROUP",
           groupEntityId(group),
           "PLAN_UNASSIGNED",
-          "候选资源与已有任务时间重叠，trip 无法自动分配。",
-          "建议人工调整，或增加可用司机/车辆。",
+          "Candidate resources overlap with existing tasks; this trip cannot be auto-assigned.",
+          "Consider manual adjustment or add available drivers/vehicles.",
           group.urgent_count > 0,
           { order_ids: group.orders.map((order) => order.order_id), dispatch_date: group.dispatch_date, zone_code: group.zone_code }
         )
@@ -1884,16 +1884,16 @@ function renderAssignments(assignments, plans) {
     if (Array.isArray(plans) && plans.length > 0) {
       node.innerHTML = `
         <div class="empty-state-copy">
-          <strong>计划已生成，但暂无订单分配记录。</strong>
-          <p>请查看 Exceptions 或开发者模式中的 Result JSON 继续排查。</p>
+          <strong>Plans were generated, but no order assignments were produced.</strong>
+          <p>Check Exceptions or Result JSON in Developer Mode for troubleshooting.</p>
         </div>
       `;
       return;
     }
     node.innerHTML = `
       <div class="empty-state-copy">
-        <strong>暂无分配结果</strong>
-        <p>生成计划后，这里会按 司机 -> 车辆 -> 订单 展示最终分配。</p>
+        <strong>No assignments yet</strong>
+        <p>After generating a plan, final assignments will be shown here as Driver -> Vehicle -> Orders.</p>
       </div>
     `;
     return;
@@ -2032,7 +2032,7 @@ function renderExceptions(exceptions, plans) {
   if (!node) return;
   if (!Array.isArray(exceptions) || exceptions.length === 0) {
     node.className = "exceptions-list empty-state";
-    node.textContent = "当前没有异常。";
+    node.textContent = "No exceptions.";
     return;
   }
   const lookups = buildResultDisplayLookups();
@@ -2044,8 +2044,8 @@ function renderExceptions(exceptions, plans) {
         <article class="exception-item">
           <h4>${escapeHtml(asText(item.reason_code))}</h4>
           <p>${escapeHtml(asText(item.reason_text))}</p>
-          <p><strong>影响对象：</strong>${escapeHtml(details.join(" | "))}</p>
-          <p><strong>建议：</strong>${escapeHtml(asText(item.suggested_action || "-"))}</p>
+          <p><strong>Impacted:</strong>${escapeHtml(details.join(" | "))}</p>
+          <p><strong>Suggested action:</strong>${escapeHtml(asText(item.suggested_action || "-"))}</p>
         </article>
       `;
     })
@@ -2057,7 +2057,7 @@ function renderPlans(plans) {
   if (!node) return;
   if (!Array.isArray(plans) || plans.length === 0) {
     node.className = "plans-list empty-state";
-    node.innerHTML = "生成计划后，这里会显示分组分配摘要。";
+    node.innerHTML = "After generating a plan, grouped assignment summaries will appear here.";
     return;
   }
   const lookups = buildResultDisplayLookups();
@@ -2107,8 +2107,8 @@ function renderValidationPanel(report) {
   }
   panel.classList.remove("hidden");
   panel.innerHTML = `
-    ${errors.length > 0 ? `<div class="validation-block"><strong>阻断错误 (${errors.length})</strong><ul>${errors.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>` : ""}
-    ${warnings.length > 0 ? `<div class="validation-block"><strong>警告 (${warnings.length})</strong><ul>${warnings.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>` : ""}
+    ${errors.length > 0 ? `<div class="validation-block"><strong>Blocking Errors (${errors.length})</strong><ul>${errors.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>` : ""}
+    ${warnings.length > 0 ? `<div class="validation-block"><strong>Warnings (${warnings.length})</strong><ul>${warnings.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>` : ""}
   `;
 }
 
@@ -2118,8 +2118,8 @@ function handleOrderFileImport(event) {
   if (!file) return;
   const name = asText(file.name).toLowerCase();
   if (name.endsWith(".xlsx")) {
-    setImportReport("当前仅支持 CSV。请先将 Excel 另存为 CSV 再导入。", true);
-    banner("Excel 导入暂不支持，请转为 CSV。", "error");
+    setImportReport("Only CSV is supported right now. Please save Excel as CSV before importing.", true);
+    banner("Excel import is not supported yet. Please convert to CSV.", "error");
     input.value = "";
     return;
   }
@@ -2128,22 +2128,22 @@ function handleOrderFileImport(event) {
     try {
       const text = asText(reader.result);
       const report = importOrdersFromCsv(text);
-      const summary = `CSV 导入：成功 ${report.succeeded} 行，失败 ${report.failedRows.length} 行，警告 ${report.warnings.length} 条。`;
-      const details = report.failedRows.map((item) => `第 ${item.line} 行：${item.reason}`).join("\n");
+      const summary = `CSV import: ${report.succeeded} succeeded, ${report.failedRows.length} failed, ${report.warnings.length} warning(s).`;
+      const details = report.failedRows.map((item) => `Line ${item.line}: ${item.reason}`).join("\n");
       const warningText = report.warnings.length > 0 ? `\n${report.warnings.join("\n")}` : "";
       setImportReport(details ? `${summary}\n${details}${warningText}` : `${summary}${warningText}`, report.failedRows.length > 0);
       if (report.succeeded > 0) renderOrdersTable();
       banner(summary, report.failedRows.length > 0 ? "error" : "success");
     } catch (error) {
-      setImportReport(`CSV 导入失败：${error.message}`, true);
-      banner(`CSV 导入失败：${error.message}`, "error");
+      setImportReport(`CSV import failed: ${error.message}`, true);
+      banner(`CSV import failed: ${error.message}`, "error");
     } finally {
       input.value = "";
     }
   };
   reader.onerror = () => {
-    setImportReport("文件读取失败。", true);
-    banner("文件读取失败。", "error");
+    setImportReport("Failed to read file.", true);
+    banner("Failed to read file.", "error");
     input.value = "";
   };
   reader.readAsText(file, "utf-8");
@@ -2155,7 +2155,7 @@ function importOrdersFromCsv(csvText) {
   const [header, ...dataRows] = rows;
   const indexMap = buildHeaderIndexMap(header);
   if (indexMap.order_id < 0 || indexMap.delivery_address < 0 || indexMap.postcode < 0) {
-    throw new Error("CSV 缺少必要列：order_id / delivery_address / postcode。");
+    throw new Error("CSV is missing required columns: order_id / delivery_address / postcode.");
   }
   const report = { succeeded: 0, failedRows: [], warnings: [] };
   for (let i = 0; i < dataRows.length; i += 1) {
@@ -2175,16 +2175,16 @@ function importOrdersFromCsv(csvText) {
       window_end: readCsvValue(cells, indexMap.window_end) || "10:00"
     };
     if (isBlank(candidate.order_id) || isBlank(candidate.delivery_address) || isBlank(candidate.postcode)) {
-      report.failedRows.push({ line: lineNo, reason: "order_id / delivery_address / postcode 不能为空。" });
+      report.failedRows.push({ line: lineNo, reason: "order_id / delivery_address / postcode is required." });
       continue;
     }
     const mappedZone = resolveZoneCodeByPostcode(candidate.postcode, appState.view.config._extra?.zone_by_postcode || {});
     if (!mappedZone) {
-      report.failedRows.push({ line: lineNo, reason: "postcode 未命中 zone 映射。" });
+      report.failedRows.push({ line: lineNo, reason: "postcode did not map to a zone." });
       continue;
     }
     if (candidate.zone_code && asText(candidate.zone_code).trim() !== mappedZone) {
-      report.warnings.push(`第 ${lineNo} 行：zone_code 与 postcode 映射冲突，已采用 ${mappedZone}。`);
+      report.warnings.push(`Line ${lineNo}: zone_code conflicts with postcode mapping. Using ${mappedZone}.`);
     }
     candidate.zone_code = mappedZone;
     appState.view.orders.push(createOrderRow(candidate));
@@ -2351,8 +2351,8 @@ function buildUnusedDriverHints(drivers, runs, assignedPlanCount, candidateStats
             "DRIVER",
             driver.driver_id,
             "DRIVER_UNUSED_NO_REMAINING_RUN",
-            `司机 ${driverDisplay} 本轮未被激活：没有剩余可分配任务。`,
-            "如需提升司机利用率，可增加订单量或开启更细粒度拆分。",
+            `Driver ${driverDisplay} was not activated this run: no remaining assignable tasks.`,
+            "To improve driver utilization, increase order volume or enable finer-grained splitting.",
             false
           )
         );
@@ -2362,8 +2362,8 @@ function buildUnusedDriverHints(drivers, runs, assignedPlanCount, candidateStats
             "DRIVER",
             driver.driver_id,
             "DRIVER_UNUSED_NO_FEASIBLE_CANDIDATE",
-            `司机 ${driverDisplay} 在当前硬约束下没有可行候选任务。`,
-            "请检查班次、容量、指定司机与时间窗约束。",
+            `Driver ${driverDisplay} has no feasible candidate tasks under current hard constraints.`,
+            "Check shift windows, capacity, designated-driver, and time-window constraints.",
             false
           )
         );
@@ -2374,8 +2374,8 @@ function buildUnusedDriverHints(drivers, runs, assignedPlanCount, candidateStats
             "DRIVER",
             driver.driver_id,
             "DRIVER_UNUSED_OUTSCORED",
-            `司机 ${driverDisplay} 有可行候选，但在全局优先级下未被选中。`,
-            "可调整负载均衡与利用率权重以提高覆盖。",
+            `Driver ${driverDisplay} has feasible candidates but was not selected under global priorities.`,
+            "Adjust balancing and utilization weights to increase coverage.",
             false
           )
         );
@@ -2526,7 +2526,7 @@ function parseZoneList(value) {
   const text = asText(value).trim();
   if (text === "") return { values: [], invalid: false };
   const parts = text
-    .split(/[,，\s]+/)
+    .split(/[,\s]+/)
     .map((item) => item.trim())
     .filter((item) => item !== "");
   const values = [];
