@@ -102,7 +102,12 @@ const appState = {
   snapshot: createInitialSnapshot(),
   view: null,
   validation: createEmptyValidation(),
-  result: deepClone(EMPTY_RESULT)
+  result: deepClone(EMPTY_RESULT),
+  uiMode: "input",
+  isResultStale: false,
+  lastGeneratedAt: null,
+  reviewSearchQuery: "",
+  reviewFilter: "all"
 };
 
 let rowSequence = 1;
@@ -113,7 +118,14 @@ function bootstrap() {
   bindEvents();
   applySnapshotToState(createInitialSnapshot());
   appState.result = deepClone(EMPTY_RESULT);
+  appState.uiMode = "input";
+  appState.isResultStale = false;
+  appState.lastGeneratedAt = null;
+  appState.reviewSearchQuery = "";
+  appState.reviewFilter = "all";
+  applyUiMode();
   renderResult(appState.result);
+  renderInputSummaryPanel();
   setImportReport("");
   banner("No orders yet. Add orders manually or import CSV; drivers and vehicles are already displayed.", "info");
 }
@@ -121,6 +133,10 @@ function bootstrap() {
 function bindEvents() {
   onIf("loadSampleBtn", "click", loadSampleData);
   onIf("runPlannerBtn", "click", handleRunPlanner);
+  onIf("editInputsBtn", "click", handleEditInputs);
+  onIf("regeneratePlanBtn", "click", handleRunPlanner);
+  onIf("summaryEditInputsBtn", "click", handleEditInputs);
+  onIf("summaryRegenerateBtn", "click", handleRunPlanner);
   onIf("exportSnapshotBtn", "click", handleExportSnapshot);
   onIf("addOrderBtn", "click", handleAddOrder);
   onIf("addDriverBtn", "click", handleAddDriver);
@@ -152,6 +168,63 @@ function bindEvents() {
   for (const [id, key] of Object.entries(CONFIG_INPUT_MAP)) {
     onIf(id, "input", (event) => {
       appState.view.config[key] = event.target.value;
+      markResultOutdatedIfNeeded();
+    });
+  }
+
+  onIf("reviewSearchInput", "input", (event) => {
+    appState.reviewSearchQuery = asText(event.target?.value).trim();
+    renderResult(appState.result);
+  });
+  onIf("clearReviewFilterBtn", "click", clearReviewFilters);
+
+  const reviewToolbar = get("reviewToolbar");
+  if (reviewToolbar) {
+    reviewToolbar.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-review-filter]");
+      if (!button) return;
+      appState.reviewFilter = asText(button.dataset.reviewFilter).trim() || "all";
+      updateReviewFilterChips();
+      renderResult(appState.result);
+    });
+  }
+
+  const assignmentsContainer = get("orderAssignmentsContainer");
+  if (assignmentsContainer) {
+    assignmentsContainer.addEventListener("click", (event) => {
+      const reasonButton = event.target.closest("button[data-action='toggle-reason']");
+      if (reasonButton) {
+        const selector = reasonButton.dataset.target;
+        if (selector) {
+          const detail = assignmentsContainer.querySelector(selector);
+          if (detail) {
+            const nextOpen = detail.getAttribute("data-open") !== "true";
+            detail.setAttribute("data-open", nextOpen ? "true" : "false");
+            reasonButton.textContent = nextOpen ? "Hide Reason" : "View Reason";
+          }
+        }
+        return;
+      }
+
+      const clearButton = event.target.closest("button[data-action='clear-filters']");
+      if (clearButton) {
+        clearReviewFilters();
+      }
+    });
+  }
+
+  const exceptionsContainer = get("exceptionsContainer");
+  if (exceptionsContainer) {
+    exceptionsContainer.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-action='toggle-exception-detail']");
+      if (!button) return;
+      const selector = button.dataset.target;
+      if (!selector) return;
+      const detail = exceptionsContainer.querySelector(selector);
+      if (!detail) return;
+      const nextOpen = detail.getAttribute("data-open") !== "true";
+      detail.setAttribute("data-open", nextOpen ? "true" : "false");
+      button.textContent = nextOpen ? "Hide details" : "View details";
     });
   }
 }
@@ -838,11 +911,18 @@ function applySnapshotToState(rawSnapshot) {
   renderWorkbench();
   renderValidationPanel(appState.validation);
   renderSnapshotEditor();
+  renderInputSummaryPanel();
 }
 
 function loadSampleData() {
   applySnapshotToState(createSampleSnapshot());
   appState.result = deepClone(EMPTY_RESULT);
+  appState.uiMode = "input";
+  appState.isResultStale = false;
+  appState.lastGeneratedAt = null;
+  appState.reviewSearchQuery = "";
+  appState.reviewFilter = "all";
+  applyUiMode();
   renderResult(appState.result);
   setImportReport("");
   banner("Sample data loaded. You can generate a plan now.", "info");
@@ -853,6 +933,122 @@ function renderWorkbench() {
   renderOrdersTable();
   renderDriversTable();
   renderVehiclesTable();
+  renderInputSummaryPanel();
+}
+
+function applyUiMode() {
+  const isReviewMode = appState.uiMode === "review";
+  setHidden("inputWorkspace", isReviewMode);
+  setHidden("reviewShell", !isReviewMode);
+
+  setHidden("loadSampleBtn", isReviewMode);
+  setHidden("runPlannerBtn", isReviewMode);
+  setHidden("editInputsBtn", !isReviewMode);
+  setHidden("regeneratePlanBtn", !isReviewMode);
+
+  document.body.classList.toggle("review-mode", isReviewMode);
+  document.body.classList.toggle("input-mode", !isReviewMode);
+
+  if (!isReviewMode) setDetailsOpen("advancedConfigPanel", false);
+  if (isReviewMode) {
+    setDetailsOpen("reviewTechnicalDetails", false);
+    setDetailsOpen("developerModePanel", false);
+  }
+  updateReviewFilterChips();
+}
+
+function setHidden(id, hidden) {
+  const node = get(id);
+  toggleClass(node, "hidden", !!hidden);
+}
+
+function setDetailsOpen(id, open) {
+  const node = get(id);
+  if (!node || typeof node !== "object" || !("open" in node)) return;
+  node.open = !!open;
+}
+
+function hasGeneratedResult() {
+  return !isBlank(appState.lastGeneratedAt);
+}
+
+function markResultOutdatedIfNeeded() {
+  if (!hasGeneratedResult()) return;
+  if (!appState.isResultStale) {
+    appState.isResultStale = true;
+    renderInputSummaryPanel();
+    renderReviewHeaderActions();
+    banner("Inputs changed. Regenerate required.", "info");
+  }
+}
+
+function clearReviewFilters() {
+  appState.reviewSearchQuery = "";
+  appState.reviewFilter = "all";
+  const searchInput = get("reviewSearchInput");
+  if (searchInput) searchInput.value = "";
+  updateReviewFilterChips();
+  renderResult(appState.result);
+}
+
+function updateReviewFilterChips() {
+  const toolbar = get("reviewToolbar");
+  if (toolbar && typeof toolbar.querySelectorAll === "function") {
+    const chips = toolbar.querySelectorAll("button[data-review-filter]");
+    chips.forEach((chip) => {
+      const current = asText(chip.dataset.reviewFilter).trim();
+      toggleClass(chip, "is-active", current === appState.reviewFilter);
+    });
+  }
+  const clearBtn = get("clearReviewFilterBtn");
+  const hasSearch = !isBlank(appState.reviewSearchQuery);
+  const hasFilter = asText(appState.reviewFilter).trim().toLowerCase() !== "all";
+  toggleClass(clearBtn, "hidden", !hasSearch && !hasFilter);
+}
+
+function renderInputSummaryPanel() {
+  const orders = safeArray(appState.view?.orders);
+  const drivers = safeArray(appState.view?.drivers);
+  const vehicles = safeArray(appState.view?.vehicles);
+  const urgentOrders = orders.filter((order) => normalizeUrgency(order?.urgency) === "URGENT").length;
+  const availableDrivers = drivers.filter((driver) => driver?.is_available !== false).length;
+  const availableVehicles = vehicles.filter((vehicle) => vehicle?.is_available !== false).length;
+  const validationErrors = safeArray(appState.validation?.errors).length;
+  const validationWarnings = safeArray(appState.validation?.warnings).length;
+  const validationStatus =
+    validationErrors > 0
+      ? `Blocked (${validationErrors})`
+      : validationWarnings > 0
+        ? `Warnings (${validationWarnings})`
+        : "Ready";
+
+  setIf("inputSummaryOrdersCount", String(orders.length));
+  setIf("inputSummaryUrgentCount", String(urgentOrders));
+  setIf("inputSummaryDriversCount", String(availableDrivers));
+  setIf("inputSummaryVehiclesCount", String(availableVehicles));
+  setIf("inputSummaryBucket", `${positiveInt(appState.view?.config?.bucket_minutes, DEFAULT_CONFIG.bucket_minutes)} mins`);
+
+  setIf("inputSetupOrdersCount", String(orders.length));
+  setIf("inputSetupUrgentCount", String(urgentOrders));
+  setIf("inputSetupDriversCount", String(availableDrivers));
+  setIf("inputSetupVehiclesCount", String(availableVehicles));
+  setIf("inputSetupValidationStatus", validationStatus);
+
+  const generatedText = hasGeneratedResult()
+    ? new Date(appState.lastGeneratedAt).toLocaleString()
+    : "-";
+  setIf("inputSummaryGeneratedAt", generatedText);
+
+  const statusBadge = get("inputSummaryStatusBadge");
+  if (statusBadge) {
+    const statusText = !hasGeneratedResult()
+      ? "No generated result yet"
+      : appState.isResultStale
+        ? "Regenerate required"
+        : "Result is current";
+    statusBadge.textContent = statusText;
+    toggleClass(statusBadge, "pill-warn", appState.isResultStale);
+  }
 }
 
 function renderConfigInputs() {
@@ -921,6 +1117,8 @@ function renderDriversTable() {
       `;
     })
     .join("");
+  const badge = get("driversCountBadge");
+  if (badge) badge.textContent = `${appState.view.drivers.length} drivers`;
 }
 
 function renderVehiclesTable() {
@@ -954,16 +1152,22 @@ function renderVehiclesTable() {
 function handleAddOrder() {
   appState.view.orders.push(createOrderRow({}));
   renderOrdersTable();
+  markResultOutdatedIfNeeded();
+  renderInputSummaryPanel();
 }
 
 function handleAddDriver() {
   appState.view.drivers.push(createDriverRow({}));
   renderDriversTable();
+  markResultOutdatedIfNeeded();
+  renderInputSummaryPanel();
 }
 
 function handleAddVehicle() {
   appState.view.vehicles.push(createVehicleRow({}));
   renderVehiclesTable();
+  markResultOutdatedIfNeeded();
+  renderInputSummaryPanel();
 }
 
 function handleOrderTableClick(event) {
@@ -972,6 +1176,8 @@ function handleOrderTableClick(event) {
   const index = Number(button.dataset.index);
   appState.view.orders.splice(index, 1);
   renderOrdersTable();
+  markResultOutdatedIfNeeded();
+  renderInputSummaryPanel();
 }
 
 function handleDriverTableClick(event) {
@@ -980,6 +1186,8 @@ function handleDriverTableClick(event) {
   const index = Number(button.dataset.index);
   appState.view.drivers.splice(index, 1);
   renderDriversTable();
+  markResultOutdatedIfNeeded();
+  renderInputSummaryPanel();
 }
 
 function handleVehicleTableClick(event) {
@@ -988,6 +1196,8 @@ function handleVehicleTableClick(event) {
   const index = Number(button.dataset.index);
   appState.view.vehicles.splice(index, 1);
   renderVehiclesTable();
+  markResultOutdatedIfNeeded();
+  renderInputSummaryPanel();
 }
 
 function handleOrderTableInput(event) {
@@ -1009,6 +1219,8 @@ function handleOrderTableInput(event) {
       zoneCell.textContent = resolveZoneLabelByCode(current.zone_code, zoneLabelByCode);
     }
   }
+  markResultOutdatedIfNeeded();
+  renderInputSummaryPanel();
 }
 
 function handleDriverTableInput(event) {
@@ -1021,6 +1233,8 @@ function handleDriverTableInput(event) {
   const current = appState.view.drivers[index];
   if (!current) return;
   current[field] = target.type === "checkbox" ? target.checked : target.value;
+  markResultOutdatedIfNeeded();
+  renderInputSummaryPanel();
 }
 
 function handleVehicleTableInput(event) {
@@ -1033,6 +1247,8 @@ function handleVehicleTableInput(event) {
   const current = appState.view.vehicles[index];
   if (!current) return;
   current[field] = target.type === "checkbox" ? target.checked : target.value;
+  markResultOutdatedIfNeeded();
+  renderInputSummaryPanel();
 }
 
 function validateViewModel(view, options = { normalize: false }) {
@@ -1122,6 +1338,8 @@ function handleSyncSnapshotJson() {
   }
   appState.snapshot = viewModelToSnapshot(appState.view);
   renderSnapshotEditor();
+  markResultOutdatedIfNeeded();
+  renderInputSummaryPanel();
   banner("Snapshot JSON synchronized from tables.", "success");
 }
 
@@ -1133,6 +1351,8 @@ function handleApplySnapshotJson() {
   }
   try {
     applySnapshotToState(JSON.parse(raw));
+    markResultOutdatedIfNeeded();
+    renderInputSummaryPanel();
     banner("Applied JSON back to tables.", "success");
   } catch (error) {
     banner(`Failed to apply JSON: ${error.message}`, "error");
@@ -1150,6 +1370,7 @@ function handleExportSnapshot() {
   }
   appState.snapshot = viewModelToSnapshot(appState.view);
   renderSnapshotEditor();
+  renderInputSummaryPanel();
   const blob = new Blob([prettyJson(appState.snapshot)], { type: "application/json;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -1174,12 +1395,23 @@ function handleRunPlanner() {
   appState.snapshot = viewModelToSnapshot(appState.view);
   renderSnapshotEditor();
   appState.result = planDispatch(appState.snapshot);
-  renderResult(appState.result);
+  appState.uiMode = "review";
+  appState.isResultStale = false;
+  appState.lastGeneratedAt = new Date().toISOString();
+  applyUiMode();
+  renderReviewDashboard(appState.result);
+  renderInputSummaryPanel();
   const warningSuffix = report.warnings.length > 0 ? ` and auto-normalized ${report.warnings.length} input value(s)` : "";
   banner(
     `Generated ${appState.result.plans.length} plan(s), ${appState.result.order_assignments.length} order assignment(s), ${appState.result.exceptions.length} exception(s)${warningSuffix}.`,
     "success"
   );
+}
+
+function handleEditInputs() {
+  appState.uiMode = "input";
+  applyUiMode();
+  renderInputSummaryPanel();
 }
 
 function normalizePlannerInput(snapshot) {
@@ -1762,18 +1994,220 @@ function planDispatch(snapshot) {
 }
 
 function renderResult(result) {
-  const plans = Array.isArray(result?.plans) ? result.plans : [];
-  const assignments = Array.isArray(result?.order_assignments) ? result.order_assignments : [];
-  const exceptions = Array.isArray(result?.exceptions) ? result.exceptions : [];
-  const assignedDrivers = new Set(assignments.map((item) => asText(item.driver_id).trim()).filter((item) => item !== ""));
-  if (get("plansCount")) get("plansCount").textContent = String(plans.length);
-  if (get("assignmentsCount")) get("assignmentsCount").textContent = String(assignments.length);
-  if (get("exceptionsCount")) get("exceptionsCount").textContent = String(exceptions.length);
-  if (get("assignedDrivers")) get("assignedDrivers").textContent = String(assignedDrivers.size);
-  renderAssignments(assignments, plans);
-  renderExceptions(exceptions, plans);
+  renderReviewDashboard(result);
+}
+
+function normalizeResultPayload(result) {
+  return {
+    plans: Array.isArray(result?.plans) ? result.plans : [],
+    order_assignments: Array.isArray(result?.order_assignments) ? result.order_assignments : [],
+    exceptions: Array.isArray(result?.exceptions) ? result.exceptions : []
+  };
+}
+
+function renderReviewDashboard(result) {
+  const normalizedResult = normalizeResultPayload(result);
+  const reviewModel = buildReviewModel(
+    normalizedResult.plans,
+    normalizedResult.order_assignments,
+    normalizedResult.exceptions
+  );
+
+  setIf("plansCount", String(normalizedResult.plans.length));
+  setIf("assignmentsCount", String(normalizedResult.order_assignments.length));
+  setIf("exceptionsCount", String(normalizedResult.exceptions.length));
+  setIf("assignedDrivers", String(reviewModel.kpis.usedDrivers));
+
+  if (get("resultJson")) get("resultJson").textContent = prettyJson(normalizedResult);
+  updateReviewFilterChips();
+
+  renderReviewHeaderActions();
+  renderReviewSidebarSummary();
+  renderReviewKpis(normalizedResult, reviewModel);
+  renderReviewExceptions(normalizedResult, reviewModel);
+  renderReviewDriverCards(normalizedResult, reviewModel);
+  renderReviewTechnicalDetails(normalizedResult, reviewModel);
+}
+
+function renderReviewHeaderActions() {
+  const regenerateBtn = get("regeneratePlanBtn");
+  const summaryRegenerateBtn = get("summaryRegenerateBtn");
+  const text = appState.isResultStale ? "Regenerate Required" : "Regenerate Plan";
+  if (regenerateBtn) regenerateBtn.textContent = text;
+  if (summaryRegenerateBtn) summaryRegenerateBtn.textContent = text;
+}
+
+function renderReviewSidebarSummary() {
+  renderInputSummaryPanel();
+}
+
+function renderReviewKpis(result, reviewModelOverride = null) {
+  const normalizedResult = normalizeResultPayload(result);
+  const reviewModel =
+    reviewModelOverride ||
+    buildReviewModel(
+      normalizedResult.plans,
+      normalizedResult.order_assignments,
+      normalizedResult.exceptions
+    );
+
+  setIf("kpiAssignedOrders", String(reviewModel.kpis.assignedOrders));
+  setIf("kpiUnassignedOrders", String(reviewModel.kpis.unassignedOrders));
+  setIf("kpiUsedDrivers", String(reviewModel.kpis.usedDrivers));
+  setIf("kpiUsedVehicles", String(reviewModel.kpis.usedVehicles));
+  setIf("kpiExceptions", String(reviewModel.kpis.exceptions));
+}
+
+function renderReviewExceptions(result, reviewModelOverride = null) {
+  const normalizedResult = normalizeResultPayload(result);
+  const reviewModel =
+    reviewModelOverride ||
+    buildReviewModel(
+      normalizedResult.plans,
+      normalizedResult.order_assignments,
+      normalizedResult.exceptions
+    );
+  const plans = safeArray(reviewModel?.plans);
+  const filteredExceptions = safeArray(reviewModel?.filteredExceptions);
+  renderExceptions(filteredExceptions, plans, reviewModel);
+}
+
+function renderReviewDriverCards(result, reviewModelOverride = null) {
+  const normalizedResult = normalizeResultPayload(result);
+  const reviewModel =
+    reviewModelOverride ||
+    buildReviewModel(
+      normalizedResult.plans,
+      normalizedResult.order_assignments,
+      normalizedResult.exceptions
+    );
+  const plans = safeArray(reviewModel?.plans);
+  const filteredAssignments = safeArray(reviewModel?.filteredAssignments);
+  renderAssignments(filteredAssignments, plans, reviewModel);
+}
+
+function renderReviewTechnicalDetails(result, reviewModelOverride = null) {
+  const normalizedResult = normalizeResultPayload(result);
+  const reviewModel =
+    reviewModelOverride ||
+    buildReviewModel(
+      normalizedResult.plans,
+      normalizedResult.order_assignments,
+      normalizedResult.exceptions
+    );
+  const plans = safeArray(reviewModel?.plans);
   renderPlans(plans);
-  if (get("resultJson")) get("resultJson").textContent = prettyJson(result);
+}
+
+function buildReviewModel(plans, assignments, exceptions) {
+  const allAssignments = safeArray(assignments);
+  const allExceptions = safeArray(exceptions);
+  const inputOrders = safeArray(appState.view?.orders);
+  const orderMap = new Map(
+    inputOrders.map((order) => [asText(order.order_id).trim(), order])
+  );
+  const lookups = buildResultDisplayLookups();
+
+  const assignedRows = allAssignments.filter((item) => isAssignmentSelected(item));
+  const assignedOrderIds = new Set(
+    assignedRows.map((item) => asText(item.order_id).trim()).filter((item) => item !== "")
+  );
+
+  const inputOrderIds = new Set(inputOrders.map((item) => asText(item.order_id).trim()).filter((item) => item !== ""));
+  const baseUnassigned = Array.from(inputOrderIds).filter((orderId) => !assignedOrderIds.has(orderId)).length;
+
+  const usedDrivers = new Set(
+    assignedRows.map((item) => asText(item.driver_id).trim()).filter((item) => item !== "")
+  ).size;
+  const usedVehicles = new Set(
+    assignedRows.map((item) => asText(item.vehicle_id).trim()).filter((item) => item !== "")
+  ).size;
+
+  const filteredAssignments = allAssignments.filter((item) =>
+    assignmentMatchesReviewFilter(item, orderMap, lookups)
+  );
+  const filteredExceptions = allExceptions.filter((item) =>
+    exceptionMatchesReviewFilter(item, filteredAssignments, orderMap, lookups)
+  );
+
+  return {
+    plans: safeArray(plans),
+    assignments: allAssignments,
+    exceptions: allExceptions,
+    filteredAssignments,
+    filteredExceptions,
+    orderMap,
+    lookups,
+    kpis: {
+      assignedOrders: assignedOrderIds.size,
+      unassignedOrders: baseUnassigned,
+      usedDrivers,
+      usedVehicles,
+      exceptions: allExceptions.length
+    }
+  };
+}
+
+function isAssignmentSelected(item) {
+  const status = asText(item?.status).trim().toUpperCase();
+  if (status === "ASSIGNED") return true;
+  const hasDriver = !isBlank(item?.driver_id);
+  const hasVehicle = !isBlank(item?.vehicle_id);
+  return hasDriver && hasVehicle;
+}
+
+function assignmentMatchesReviewFilter(item, orderMap, lookups) {
+  const filter = asText(appState.reviewFilter).trim().toLowerCase() || "all";
+  const orderId = asText(item.order_id).trim();
+  const order = orderMap.get(orderId) || null;
+  const urgency = normalizeUrgency(order?.urgency || item?.urgency || "NORMAL");
+  const assigned = isAssignmentSelected(item);
+
+  if (filter === "urgent" && urgency !== "URGENT") return false;
+  if (filter === "unassigned" && assigned) return false;
+  if (filter === "exceptions") return false;
+
+  const query = asText(appState.reviewSearchQuery).trim().toLowerCase();
+  if (query === "") return true;
+  const driverDisplay = resolveDriverDisplay(item.driver_id, lookups);
+  const vehicleDisplay = resolveVehicleDisplay(item.vehicle_id, lookups);
+  const text = [
+    item.order_id,
+    order?.delivery_address,
+    order?.postcode,
+    order?.zone_code,
+    item.postcode,
+    item.zone_code,
+    item.driver_id,
+    driverDisplay,
+    item.vehicle_id,
+    vehicleDisplay
+  ]
+    .map((value) => asText(value).toLowerCase())
+    .join(" ");
+  return text.includes(query);
+}
+
+function exceptionMatchesReviewFilter(item, filteredAssignments, orderMap, lookups) {
+  const filter = asText(appState.reviewFilter).trim().toLowerCase() || "all";
+  if (filter !== "all" && filter !== "exceptions") {
+    return filter === "urgent"
+      ? !!item?.is_urgent
+      : true;
+  }
+  const query = asText(appState.reviewSearchQuery).trim().toLowerCase();
+  if (query === "") return true;
+  const details = buildExceptionBusinessDetails(item, appState.result?.plans, lookups).join(" ").toLowerCase();
+  const summary = [
+    item.reason_code,
+    item.reason_text,
+    item.entity_id,
+    item.suggested_action,
+    details
+  ]
+    .map((value) => asText(value).toLowerCase())
+    .join(" ");
+  return summary.includes(query);
 }
 
 function getRenderUtilsModule() {
@@ -1876,11 +2310,71 @@ function buildDriverAssignmentSummary(assignments, plans) {
     .sort((left, right) => left.driver_display.localeCompare(right.driver_display, undefined, { numeric: true, sensitivity: "base" }));
 }
 
-function renderAssignments(assignments, plans) {
+function buildOrderDetailMap(plans) {
+  const detailMap = new Map();
+  const planByOrderId = new Map();
+  for (const plan of safeArray(plans)) {
+    for (const orderId of safeArray(plan.order_ids)) {
+      planByOrderId.set(asText(orderId).trim(), plan);
+    }
+  }
+  for (const order of safeArray(appState.view?.orders)) {
+    const orderId = asText(order.order_id).trim();
+    if (!orderId) continue;
+    const relatedPlan = planByOrderId.get(orderId) || null;
+    detailMap.set(orderId, {
+      delivery_address: asText(order.delivery_address).trim(),
+      postcode: asText(order.postcode).trim(),
+      zone_code: asText(order.zone_code).trim(),
+      urgency: normalizeUrgency(order.urgency),
+      pallet_qty: nonNegativeInt(order.pallet_qty, 0),
+      loose_bags: nonNegativeInt(order.loose_bags, 0),
+      load_text: formatOrderLoadText(order),
+      window_text: formatOrderWindowText(order, relatedPlan),
+      plan_zone_code: asText(relatedPlan?.zone_code).trim()
+    });
+  }
+  return detailMap;
+}
+
+function formatOrderLoadText(order) {
+  const pallets = nonNegativeInt(order?.pallet_qty, 0);
+  const loose = nonNegativeInt(order?.loose_bags, 0);
+  if (pallets === 0 && loose === 0) return "-";
+  return `Pallet ${pallets} / Loose ${loose}`;
+}
+
+function formatOrderWindowText(order, plan) {
+  const eta = asText(order?.eta || "").trim();
+  if (eta) return eta;
+  const plannedStart = asText(order?.planned_start || "").trim();
+  const plannedFinish = asText(order?.planned_finish || "").trim();
+  if (plannedStart || plannedFinish) {
+    return `${plannedStart || "-"} - ${plannedFinish || "-"}`;
+  }
+  const start = asText(order?.window_start || plan?.time_window_start || "").trim();
+  const end = asText(order?.window_end || plan?.time_window_end || "").trim();
+  if (start || end) return `${start || "-"} - ${end || "-"}`;
+  return "-";
+}
+
+function renderAssignments(assignments, plans, reviewModel = null) {
   const node = get("orderAssignmentsContainer");
   if (!node) return;
+  const filterLabel = asText(appState.reviewFilter).trim().toLowerCase();
+  const hasSearchOrFilter = !isBlank(appState.reviewSearchQuery) || filterLabel !== "all";
   if (!Array.isArray(assignments) || assignments.length === 0) {
     node.className = "empty-state";
+    if (hasSearchOrFilter) {
+      node.innerHTML = `
+        <div class="empty-state-copy">
+          <strong>No matching records</strong>
+          <p>Try different search keywords or clear current filters.</p>
+          <button class="button button-mini button-secondary" data-action="clear-filters">Clear Filters</button>
+        </div>
+      `;
+      return;
+    }
     if (Array.isArray(plans) && plans.length > 0) {
       node.innerHTML = `
         <div class="empty-state-copy">
@@ -1899,64 +2393,93 @@ function renderAssignments(assignments, plans) {
     return;
   }
 
+  const orderDetails = buildOrderDetailMap(plans);
   const summaries = buildDriverAssignmentSummary(assignments, plans);
-  node.className = "driver-summary-list";
+  node.className = "driver-dashboard-list";
   node.innerHTML = summaries
     .map((driverSummary) => {
+      const driverOrderRows = safeArray(driverSummary.vehicles).flatMap((vehicle) => safeArray(vehicle.orders));
+      const earliest = extractExtremeTime(driverOrderRows, "planned_start", "min");
+      const latest = extractExtremeTime(driverOrderRows, "planned_finish", "max");
+      const coveredZones = Array.from(
+        new Set(
+          driverOrderRows
+            .map((item) => {
+              const orderDetail = orderDetails.get(asText(item.order_id).trim());
+              return asText(orderDetail?.zone_code || item.zone_code).trim();
+            })
+            .filter((zone) => zone !== "")
+        )
+      );
       const vehiclesHtml = safeArray(driverSummary.vehicles)
         .map((vehicleSummary) => {
+          const vehicleMeta = findVehicleMeta(vehicleSummary.vehicle_id);
+          const vehicleOrders = safeArray(vehicleSummary.orders);
+          const vehicleLoadText = formatVehicleGroupLoad(vehicleOrders, orderDetails);
           const rowsHtml = safeArray(vehicleSummary.orders)
-            .map((item) => {
-              const areaText = [asText(item.postcode).trim(), asText(item.zone_code).trim()].filter(Boolean).join(" / ");
+            .map((item, orderIndex) => {
+              const orderId = asText(item.order_id).trim();
+              const orderDetail = orderDetails.get(orderId) || {};
+              const areaText = [asText(orderDetail.postcode || item.postcode).trim(), asText(orderDetail.zone_code || item.zone_code).trim()].filter(Boolean).join(" / ");
+              const orderAddress = asText(orderDetail.delivery_address).trim() || "-";
+              const urgencyText = normalizeUrgency(orderDetail.urgency || item.urgency || "NORMAL");
+              const loadText = asText(orderDetail.load_text).trim() || "-";
+              const windowText = asText(orderDetail.window_text).trim() || "-";
+              const reasonId = `assignment-reason-${escapeSelectorId(driverSummary.driver_id)}-${escapeSelectorId(vehicleSummary.vehicle_id)}-${escapeSelectorId(orderId)}-${orderIndex}`;
               return `
-                <tr>
-                  <td>${escapeHtml(asText(item.order_id))}</td>
-                  <td>${escapeHtml(asText(item.driver_display || driverSummary.driver_display || driverSummary.driver_id))}</td>
-                  <td>${escapeHtml(asText(item.vehicle_display || vehicleSummary.vehicle_display || vehicleSummary.vehicle_id))}</td>
-                  <td>${escapeHtml(asText(item.status || "ASSIGNED"))}</td>
-                  <td>${escapeHtml(areaText || "-")}</td>
-                  <td>${escapeHtml(toBusinessExplanation(item.explanation) || "-")}</td>
-                </tr>
+                <article class="order-compact-row">
+                  <div class="order-row-main">
+                    <div class="order-row-head">
+                      <strong>Order ${escapeHtml(asText(item.order_id))}</strong>
+                      <span class="pill">${escapeHtml(urgencyText)}</span>
+                    </div>
+                    <p class="order-row-address">${escapeHtml(orderAddress)}</p>
+                    <div class="order-row-meta">
+                      <span>${escapeHtml(areaText || "-")}</span>
+                      <span>Load ${escapeHtml(loadText)}</span>
+                      <span>Window ${escapeHtml(windowText)}</span>
+                      <span>Status ${escapeHtml(asText(item.status || "ASSIGNED"))}</span>
+                    </div>
+                  </div>
+                  <div class="order-row-actions">
+                    <button class="button button-mini button-ghost" data-action="toggle-reason" data-target="#${reasonId}">View Reason</button>
+                  </div>
+                  <p id="${reasonId}" class="reason-detail" data-open="false">${escapeHtml(toBusinessExplanation(item.explanation) || "-")}</p>
+                </article>
               `;
             })
             .join("");
           return `
-            <section class="driver-vehicle-group">
-              <div class="driver-vehicle-header">
+            <section class="driver-dashboard-vehicle">
+              <div class="driver-dashboard-vehicle-header">
                 <div>
-                  <h5>Vehicle ${escapeHtml(asText(vehicleSummary.vehicle_display || vehicleSummary.vehicle_id))}</h5>
-                  <p class="driver-vehicle-meta">Orders ${escapeHtml(asText(vehicleSummary.total_orders) || "0")}</p>
+                  <h5>${escapeHtml(asText(vehicleSummary.vehicle_display || vehicleSummary.vehicle_id))}</h5>
+                  <p class="driver-dashboard-vehicle-meta">
+                    ID ${escapeHtml(asText(vehicleSummary.vehicle_id))} · Type ${escapeHtml(asText(vehicleMeta?.vehicle_type) || "-")} · Orders ${escapeHtml(asText(vehicleSummary.total_orders) || "0")}
+                  </p>
                 </div>
+                <span class="pill">Load ${escapeHtml(vehicleLoadText)}</span>
               </div>
-              <div class="assignment-wrap">
-                <table class="assignment-table">
-                  <thead>
-                    <tr>
-                      <th>Order</th>
-                      <th>Driver</th>
-                      <th>Vehicle</th>
-                      <th>Status</th>
-                      <th>Postcode / Zone</th>
-                      <th>Explanation</th>
-                    </tr>
-                  </thead>
-                  <tbody>${rowsHtml}</tbody>
-                </table>
+              <div class="driver-dashboard-orders">
+                ${rowsHtml}
               </div>
             </section>
           `;
         })
         .join("");
       return `
-        <article class="driver-summary-card">
-          <header class="driver-summary-header">
+        <article class="driver-dashboard-card">
+          <header class="driver-dashboard-header">
             <div>
               <h4>${escapeHtml(asText(driverSummary.driver_display || driverSummary.driver_id))}</h4>
-              <p class="driver-summary-time">Driver ID ${escapeHtml(asText(driverSummary.driver_id))}</p>
+              <p class="driver-dashboard-subtitle">Driver ID ${escapeHtml(asText(driverSummary.driver_id))}</p>
             </div>
-            <div class="driver-summary-badges">
+            <div class="driver-dashboard-badges">
               <span class="pill">Orders ${escapeHtml(asText(driverSummary.total_orders) || "0")}</span>
               <span class="pill">Vehicles ${escapeHtml(asText(driverSummary.vehicle_count) || "0")}</span>
+              <span class="pill">Window ${escapeHtml(earliest)} - ${escapeHtml(latest)}</span>
+              <span class="pill">Zones ${escapeHtml(coveredZones.length > 0 ? coveredZones.join(", ") : "-")}</span>
+              <span class="pill">Assigned</span>
             </div>
           </header>
           ${vehiclesHtml}
@@ -1964,6 +2487,37 @@ function renderAssignments(assignments, plans) {
       `;
     })
     .join("");
+}
+
+function findVehicleMeta(vehicleId) {
+  const normalizedId = asText(vehicleId).trim();
+  return safeArray(appState.view?.vehicles).find((item) => asText(item.vehicle_id).trim() === normalizedId) || null;
+}
+
+function formatVehicleGroupLoad(orders, orderDetails) {
+  let pallets = 0;
+  let loose = 0;
+  for (const item of safeArray(orders)) {
+    const orderId = asText(item.order_id).trim();
+    const order = orderDetails.get(orderId);
+    pallets += nonNegativeInt(order?.pallet_qty ?? 0, 0);
+    loose += nonNegativeInt(order?.loose_bags ?? 0, 0);
+  }
+  if (pallets === 0 && loose === 0) return "-";
+  return `Pallet ${pallets}, Loose ${loose}`;
+}
+
+function extractExtremeTime(items, key, mode) {
+  const times = safeArray(items)
+    .map((item) => parseTimeToMinutes(item?.[key]))
+    .filter((value) => value !== null);
+  if (times.length === 0) return "-";
+  const value = mode === "max" ? Math.max(...times) : Math.min(...times);
+  return minutesToHHMM(value);
+}
+
+function escapeSelectorId(value) {
+  return asText(value).replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
 function buildExceptionPlanContext(plans, lookups) {
@@ -2027,7 +2581,29 @@ function buildExceptionBusinessDetails(item, plans, lookups) {
   return details;
 }
 
-function renderExceptions(exceptions, plans) {
+function classifyExceptionSeverity(reasonCode) {
+  const code = asText(reasonCode).trim().toUpperCase();
+  const criticalCodes = new Set([
+    "POSTCODE_NOT_MAPPED",
+    "ORDER_UNASSIGNED",
+    "NO_FEASIBLE_CANDIDATE",
+    "NO_FEASIBLE_ASSIGNMENT",
+    "CAPACITY_EXCEEDED",
+    "TIME_WINDOW_INFEASIBLE"
+  ]);
+  const warningCodes = new Set([
+    "DRIVER_UNUSED_NO_FEASIBLE_CANDIDATE",
+    "DRIVER_UNUSED_OUTSCORED",
+    "VEHICLE_UNUSED",
+    "ZONE_MISMATCH",
+    "FALLBACK_TRAVEL_TIME_USED"
+  ]);
+  if (criticalCodes.has(code)) return "Critical";
+  if (warningCodes.has(code)) return "Warning";
+  return "Info";
+}
+
+function renderExceptions(exceptions, plans, reviewModel = null) {
   const node = get("exceptionsContainer");
   if (!node) return;
   if (!Array.isArray(exceptions) || exceptions.length === 0) {
@@ -2036,20 +2612,53 @@ function renderExceptions(exceptions, plans) {
     return;
   }
   const lookups = buildResultDisplayLookups();
+  const grouped = {
+    Critical: [],
+    Warning: [],
+    Info: []
+  };
+  for (const item of exceptions) {
+    grouped[classifyExceptionSeverity(item.reason_code)].push(item);
+  }
+
   node.className = "exceptions-list";
-  node.innerHTML = exceptions
-    .map((item) => {
-      const details = buildExceptionBusinessDetails(item, plans, lookups);
-      return `
-        <article class="exception-item">
-          <h4>${escapeHtml(asText(item.reason_code))}</h4>
-          <p>${escapeHtml(asText(item.reason_text))}</p>
-          <p><strong>Impacted:</strong>${escapeHtml(details.join(" | "))}</p>
-          <p><strong>Suggested action:</strong>${escapeHtml(asText(item.suggested_action || "-"))}</p>
-        </article>
-      `;
-    })
+  node.innerHTML = Object.entries(grouped)
+    .filter(([, items]) => items.length > 0)
+    .map(([severity, items]) => `
+      <section class="exception-group severity-${severity.toLowerCase()}">
+        <div class="exception-group-header">
+          <h4>${escapeHtml(severity)}</h4>
+          <span class="pill">${items.length}</span>
+        </div>
+        ${items
+          .map((item, index) => {
+            const details = buildExceptionBusinessDetails(item, plans, lookups);
+            const detailId = `exception-detail-${severity.toLowerCase()}-${index}`;
+            return `
+              <article class="exception-item">
+                <h5>${escapeHtml(buildExceptionBusinessTitle(item))}</h5>
+                <p class="exception-code">${escapeHtml(asText(item.reason_code || "-"))}</p>
+                <p>${escapeHtml(asText(item.reason_text))}</p>
+                <p><strong>Impacted:</strong> ${escapeHtml(details.join(" | "))}</p>
+                <p><strong>Suggested action:</strong> ${escapeHtml(asText(item.suggested_action || "-"))}</p>
+                <button class="button button-mini button-ghost" data-action="toggle-exception-detail" data-target="#${detailId}">View details</button>
+                <pre id="${detailId}" class="exception-raw-detail" data-open="false">${escapeHtml(prettyJson(item))}</pre>
+              </article>
+            `;
+          })
+          .join("")}
+      </section>
+    `)
     .join("");
+}
+
+function buildExceptionBusinessTitle(item) {
+  const code = asText(item.reason_code).trim().toUpperCase();
+  if (code === "POSTCODE_NOT_MAPPED") return "Postcode mapping missing";
+  if (code.includes("UNASSIGNED")) return "Order not assigned";
+  if (code.includes("DRIVER_UNUSED")) return "Available driver not selected";
+  if (code.includes("VEHICLE")) return "Vehicle-related issue";
+  return "Dispatch exception";
 }
 
 function renderPlans(plans) {
@@ -2132,7 +2741,11 @@ function handleOrderFileImport(event) {
       const details = report.failedRows.map((item) => `Line ${item.line}: ${item.reason}`).join("\n");
       const warningText = report.warnings.length > 0 ? `\n${report.warnings.join("\n")}` : "";
       setImportReport(details ? `${summary}\n${details}${warningText}` : `${summary}${warningText}`, report.failedRows.length > 0);
-      if (report.succeeded > 0) renderOrdersTable();
+      if (report.succeeded > 0) {
+        renderOrdersTable();
+        markResultOutdatedIfNeeded();
+        renderInputSummaryPanel();
+      }
       banner(summary, report.failedRows.length > 0 ? "error" : "success");
     } catch (error) {
       setImportReport(`CSV import failed: ${error.message}`, true);
@@ -2680,7 +3293,37 @@ function setImportReport(message, isError = false) {
   const node = get("orderImportReport");
   if (!node) return;
   node.textContent = message;
-  node.classList.toggle("hint-error", !!isError);
+  toggleClass(node, "hint-error", !!isError);
+}
+
+function toggleClass(node, className, shouldApply) {
+  if (!node || !className) return;
+  const apply = !!shouldApply;
+  if (node.classList) {
+    if (typeof node.classList.toggle === "function") {
+      node.classList.toggle(className, apply);
+      return;
+    }
+    if (apply && typeof node.classList.add === "function") {
+      node.classList.add(className);
+      return;
+    }
+    if (!apply && typeof node.classList.remove === "function") {
+      node.classList.remove(className);
+      return;
+    }
+  }
+  const classTokens = asText(node.className)
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token !== "");
+  const hasClass = classTokens.includes(className);
+  if (apply && !hasClass) classTokens.push(className);
+  if (!apply && hasClass) {
+    node.className = classTokens.filter((token) => token !== className).join(" ");
+    return;
+  }
+  node.className = classTokens.join(" ");
 }
 
 function banner(message, tone = "info") {
@@ -2754,7 +3397,13 @@ function get(id) {
 
 function setIf(id, value) {
   const node = get(id);
-  if (node) node.value = value;
+  if (!node) return;
+  const tagName = asText(node.tagName).toUpperCase();
+  if (tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT") {
+    node.value = value;
+    return;
+  }
+  node.textContent = asText(value);
 }
 
 function onIf(id, eventName, handler) {

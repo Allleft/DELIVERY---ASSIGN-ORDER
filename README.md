@@ -175,7 +175,13 @@ Top-level output contract is fixed: `plans / order_assignments / exceptions`.
 ## 6. Frontend Notes
 
 - Default input mode: table editing for orders/drivers/vehicles, plus CSV order import.
+- Input/Review are two UI workflow modes under one shared dashboard visual system:
+  - Input Mode: editing-first (`Input Workbench`)
+  - Review Mode: result-first (`Dispatch Plan Review`)
 - Primary result view: `Driver Assignment Summary` (`Driver -> Vehicle -> Orders`).
+- Review KPI/summary data source:
+  - sidebar summary from `appState.view` (orders/drivers/vehicles/config)
+  - KPI counters from `appState.result` + `appState.view`
 - Secondary result view: `Assignment Groups (Secondary)` for grouped detail inspection.
 - Developer mode: full JSON inspection and round-trip apply.
 - Input shape remains `config / orders / drivers / vehicles`.

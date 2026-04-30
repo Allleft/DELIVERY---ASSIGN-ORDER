@@ -104,10 +104,10 @@ node --check frontend/overrides.js
 Latest result:
 - `node --check frontend/app.js` -> pass
 - `node --check frontend/overrides.js` -> pass
-- `python -m unittest discover -s tests -v` -> `Ran 75 tests ... OK (skipped=3)`
+- `python -m unittest discover -s tests -v` -> `Ran 79 tests ... OK`
 
 ## Remaining Risks
-- OR-Tools CP-SAT path is partially gated by environment (`skipped=3` tests where OR-Tools unavailable).
+- CLI invocation path can still be environment-sensitive depending on shell/runtime configuration.
 - `frontend/app.js` remains large despite modular improvement; further split is possible but should remain phase-gated.
 - Existing README has historical sections with mixed legacy context; current pass only aligned structural changes.
 

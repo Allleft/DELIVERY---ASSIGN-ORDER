@@ -10,25 +10,55 @@
   <div class="page-shell">
     <header class="hero">
       <div>
-        <p class="eyebrow">Delivery Dispatch Workbench</p>
-        <h1>Dispatch Assignment Workbench</h1>
-        <p class="hero-copy">Business users can maintain orders, drivers, and vehicles in tables and generate dispatch results. Underlying JSON and dispatch logic remain unchanged.</p>
+        <h1>Dispatch Workbench</h1>
       </div>
       <div class="hero-actions">
-          <button id="loadSampleBtn" class="button button-secondary">Load Sample</button>
-          <button id="runPlannerBtn" class="button button-primary">Generate Plan</button>
+          <button id="loadSampleBtn" class="button button-secondary mode-input-only">Load Sample</button>
+          <button id="runPlannerBtn" class="button button-primary mode-input-only">Generate Plan</button>
+          <button id="editInputsBtn" class="button button-secondary mode-review-only hidden">Edit Inputs</button>
+          <button id="regeneratePlanBtn" class="button button-primary mode-review-only hidden">Regenerate Plan</button>
           <button id="exportSnapshotBtn" class="button button-ghost">Export Snapshot</button>
       </div>
     </header>
 
-    <main class="workspace">
+    <div id="messageBanner" class="message-banner hidden"></div>
+
+    <main id="inputWorkspace" class="workspace input-workspace">
       <section class="panel panel-input">
         <div class="panel-heading">
           <h2>Input Workbench</h2>
-          <p>Use table editing by default to avoid manual JSON edits. Expand Advanced Settings and Developer Mode when needed.</p>
+          <p>Manage orders, drivers, and vehicles before generating a dispatch plan.</p>
         </div>
 
-        <article class="editor-card">
+        <article id="inputSetupSummary" class="editor-card input-mode-only setup-summary-card">
+          <div class="editor-title-row">
+            <h3>Setup Summary</h3>
+          </div>
+          <div class="summary-strip summary-strip-setup">
+            <div class="summary-card">
+              <span class="summary-label">Orders</span>
+              <strong id="inputSetupOrdersCount">0</strong>
+            </div>
+            <div class="summary-card">
+              <span class="summary-label">Urgent Orders</span>
+              <strong id="inputSetupUrgentCount">0</strong>
+            </div>
+            <div class="summary-card">
+              <span class="summary-label">Drivers Available</span>
+              <strong id="inputSetupDriversCount">0</strong>
+            </div>
+            <div class="summary-card">
+              <span class="summary-label">Vehicles Available</span>
+              <strong id="inputSetupVehiclesCount">0</strong>
+            </div>
+            <div class="summary-card">
+              <span class="summary-label">Validation Status</span>
+              <strong id="inputSetupValidationStatus">Ready</strong>
+            </div>
+          </div>
+        </article>
+
+        <article id="ordersEditorCard" class="editor-card input-mode-only">
           <div class="editor-title-row">
             <h3>Orders</h3>
             <div class="table-actions">
@@ -61,9 +91,13 @@
           <div id="orderImportReport" class="hint"></div>
         </article>
 
-        <article class="editor-card">
-          <div class="editor-title-row">
-            <h3>Drivers</h3>
+        <details class="editor-card input-mode-only compact-editor" id="driversEditorPanel">
+          <summary class="summary-toggle summary-metrics">
+            <span>Drivers</span>
+            <span class="pill" id="driversCountBadge">0 drivers</span>
+          </summary>
+          <div class="editor-title-row compact-editor-actions">
+            <p class="hint">Expand to edit detailed driver records.</p>
             <button id="addDriverBtn" class="button button-mini">Add Driver</button>
           </div>
           <div class="table-wrap">
@@ -84,15 +118,16 @@
               <tbody id="driversTableBody"></tbody>
             </table>
           </div>
-        </article>
+        </details>
 
-        <article class="editor-card">
-          <div class="editor-title-row">
-            <h3>Vehicles</h3>
-            <div class="table-actions">
-              <span id="vehiclesCountBadge" class="pill">0 vehicles</span>
-              <button id="addVehicleBtn" class="button button-mini">Add Vehicle</button>
-            </div>
+        <details class="editor-card input-mode-only compact-editor" id="vehiclesEditorPanel">
+          <summary class="summary-toggle summary-metrics">
+            <span>Vehicles</span>
+            <span id="vehiclesCountBadge" class="pill">0 vehicles</span>
+          </summary>
+          <div class="editor-title-row compact-editor-actions">
+            <p class="hint">Expand to edit detailed vehicle records.</p>
+            <button id="addVehicleBtn" class="button button-mini">Add Vehicle</button>
           </div>
           <div class="table-wrap">
             <table class="workbench-table" id="vehiclesTable">
@@ -114,9 +149,9 @@
               <tbody id="vehiclesTableBody"></tbody>
             </table>
           </div>
-        </article>
+        </details>
 
-        <details class="editor-card" id="advancedConfigPanel">
+        <details class="editor-card input-mode-only" id="advancedConfigPanel">
           <summary class="summary-toggle">Advanced Settings (Config)</summary>
           <div class="config-grid">
             <label>bucket_minutes<input id="cfgBucketMinutes" type="number" min="1" /></label>
@@ -127,41 +162,106 @@
           </div>
           <p class="hint">You can view and edit the full config JSON in Developer Mode.</p>
         </details>
-      </section>
-
-      <section class="panel panel-output">
-        <div class="panel-heading">
-          <h2>Output</h2>
-          <p>The default primary view focuses on Driver / Vehicle / Orders; grouped details remain in the secondary area for troubleshooting.</p>
-        </div>
-
-        <div class="summary-strip">
-          <div class="summary-card"><span class="summary-label">Groups</span><strong id="plansCount">0</strong></div>
-          <div class="summary-card"><span class="summary-label">Order Assignments</span><strong id="assignmentsCount">0</strong></div>
-          <div class="summary-card"><span class="summary-label">Exceptions</span><strong id="exceptionsCount">0</strong></div>
-          <div class="summary-card"><span class="summary-label">Assigned Drivers</span><strong id="assignedDrivers">0</strong></div>
-        </div>
-
-        <div id="messageBanner" class="message-banner hidden"></div>
         <div id="validationPanel" class="validation-panel hidden"></div>
+      </section>
+    </main>
 
-        <div class="output-stack">
-          <article class="output-card">
-            <div class="editor-title-row"><h3>Driver Assignment Summary</h3><span class="pill">order_assignments + plans</span></div>
-            <div id="orderAssignmentsContainer" class="empty-state">After generating a plan, final assignments are shown here as Driver -> Vehicle -> Orders.</div>
-          </article>
+    <section id="reviewShell" class="review-shell hidden">
+      <aside id="reviewSidebar" class="review-sidebar">
+        <article id="inputSummaryPanel" class="review-sidebar-card">
+          <div class="editor-title-row">
+            <h3>Input Summary</h3>
+            <span id="inputSummaryStatusBadge" class="pill">Result is current</span>
+          </div>
+          <div class="input-summary-grid">
+            <div class="summary-mini-card">
+              <span class="summary-mini-label">Orders</span>
+              <strong id="inputSummaryOrdersCount">0</strong>
+            </div>
+            <div class="summary-mini-card">
+              <span class="summary-mini-label">Urgent Orders</span>
+              <strong id="inputSummaryUrgentCount">0</strong>
+            </div>
+            <div class="summary-mini-card">
+              <span class="summary-mini-label">Drivers Available</span>
+              <strong id="inputSummaryDriversCount">0</strong>
+            </div>
+            <div class="summary-mini-card">
+              <span class="summary-mini-label">Vehicles Available</span>
+              <strong id="inputSummaryVehiclesCount">0</strong>
+            </div>
+            <div class="summary-mini-card">
+              <span class="summary-mini-label">Config Bucket</span>
+              <strong id="inputSummaryBucket">-</strong>
+            </div>
+            <div class="summary-mini-card">
+              <span class="summary-mini-label">Generated</span>
+              <strong id="inputSummaryGeneratedAt">-</strong>
+            </div>
+          </div>
+          <div class="review-sidebar-actions">
+            <button id="summaryEditInputsBtn" class="button button-mini button-secondary">Edit Inputs</button>
+            <button id="summaryRegenerateBtn" class="button button-mini button-primary">Regenerate Plan</button>
+          </div>
+        </article>
+      </aside>
 
-          <article class="output-card">
-            <div class="editor-title-row"><h3>Exceptions</h3><span class="pill pill-warn">exceptions</span></div>
-            <div id="exceptionsContainer" class="exceptions-list empty-state">No exceptions yet.</div>
-          </article>
+      <section id="reviewMain" class="review-main">
+        <header id="reviewHeader" class="review-header">
+          <h2>Dispatch Plan Review</h2>
+        </header>
 
-          <article class="output-card">
+        <div id="reviewToolbar" class="review-toolbar">
+          <label class="review-search-wrap" for="reviewSearchInput">
+            <span class="sr-only">Search</span>
+            <input id="reviewSearchInput" type="text" placeholder="Search by order, driver, vehicle, postcode, address..." />
+          </label>
+          <div class="review-filters" role="tablist" aria-label="Review filters">
+            <button class="button button-mini button-ghost is-active" data-review-filter="all">All</button>
+            <button class="button button-mini button-ghost" data-review-filter="urgent">Urgent</button>
+            <button class="button button-mini button-ghost" data-review-filter="unassigned">Unassigned</button>
+            <button class="button button-mini button-ghost" data-review-filter="exceptions">Exceptions</button>
+            <button id="clearReviewFilterBtn" class="button button-mini button-secondary hidden">Clear Filters</button>
+          </div>
+        </div>
+
+        <div id="reviewKpiRow" class="summary-strip">
+          <div class="summary-card"><span class="summary-label">Assigned Orders</span><strong id="kpiAssignedOrders">0</strong></div>
+          <div class="summary-card"><span class="summary-label">Unassigned Orders</span><strong id="kpiUnassignedOrders">0</strong></div>
+          <div class="summary-card"><span class="summary-label">Used Drivers</span><strong id="kpiUsedDrivers">0</strong></div>
+          <div class="summary-card"><span class="summary-label">Used Vehicles</span><strong id="kpiUsedVehicles">0</strong></div>
+          <div class="summary-card"><span class="summary-label">Exceptions</span><strong id="kpiExceptions">0</strong></div>
+        </div>
+
+        <article id="reviewExceptionsPanel" class="output-card">
+          <div class="editor-title-row">
+            <h3>Exceptions & Warnings</h3>
+            <span class="pill pill-warn">exceptions</span>
+          </div>
+          <div id="exceptionsContainer" class="exceptions-list empty-state">No exceptions yet.</div>
+        </article>
+
+        <article id="reviewDriverDashboard" class="output-card">
+          <div class="editor-title-row"><h3>Driver Assignment Summary</h3><span class="pill">Driver → Vehicle → Orders</span></div>
+          <div id="orderAssignmentsContainer" class="empty-state">After generating a plan, final assignments are shown here as Driver -> Vehicle -> Orders.</div>
+        </article>
+
+        <details id="reviewTechnicalDetails" class="output-card">
+          <summary class="summary-toggle">Technical Details</summary>
+
+          <div class="summary-strip summary-strip-secondary">
+            <div class="summary-card"><span class="summary-label">Assignment Groups</span><strong id="plansCount">0</strong></div>
+            <div class="summary-card"><span class="summary-label">Order Assignments</span><strong id="assignmentsCount">0</strong></div>
+            <div class="summary-card"><span class="summary-label">Exceptions</span><strong id="exceptionsCount">0</strong></div>
+            <div class="summary-card"><span class="summary-label">Assigned Drivers</span><strong id="assignedDrivers">0</strong></div>
+          </div>
+
+          <article class="output-card technical-nested-card">
             <div class="editor-title-row"><h3>Assignment Groups (Secondary)</h3><span class="pill pill-accent">plans</span></div>
             <div id="plansContainer" class="plans-list empty-state">After generating a plan, grouped assignment summaries are shown here.</div>
           </article>
 
-          <details class="output-card" id="developerModePanel">
+          <details class="output-card technical-nested-card" id="developerModePanel">
             <summary class="summary-toggle">Developer Mode (Full JSON)</summary>
             <div class="dev-actions">
               <button id="syncSnapshotBtn" class="button button-mini">Generate JSON from Tables</button>
@@ -175,9 +275,9 @@
   "exceptions": []
 }</pre>
           </details>
-        </div>
+        </details>
       </section>
-    </main>
+    </section>
   </div>
 
   <script src="./modules/zone-utils.js?v=20260422-zone-utils-split-pass3" defer></script>
