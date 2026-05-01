@@ -590,7 +590,6 @@ function createSampleSnapshot() {
       stillage_capacity: seed[7],
       metadata: {
         rego: seed[1],
-        source: "vehicle master export",
         raw_capacity: null,
         shelf_count: 0,
         fuel_card_shell: null,
@@ -812,7 +811,6 @@ function snapshotToViewModel(snapshot) {
       tub_capacity: asText(vehicle.tub_capacity ?? 0),
       trolley_capacity: asText(vehicle.trolley_capacity ?? 0),
       stillage_capacity: asText(vehicle.stillage_capacity ?? 0),
-      source: asText(metadata.source || "vehicle master export"),
       _extra: omitKeys(vehicle, known),
       _metadataExtra: metadataExtra
     });
@@ -887,7 +885,6 @@ function viewModelToSnapshot(view) {
     const extra = deepClone(row._extra || {});
     const metadata = deepClone(row._metadataExtra || {});
     metadata.rego = asText(row.rego).trim();
-    metadata.source = asText(row.source).trim() || "vehicle master export";
     return Object.assign(extra, {
       vehicle_id: normalizeIdentifier(row.vehicle_id),
       vehicle_type: asText(row.vehicle_type).trim() || "van",
@@ -1139,7 +1136,6 @@ function renderVehiclesTable() {
           <td><input data-field="tub_capacity" type="number" min="0" value="${escapeHtml(asText(row.tub_capacity))}" /></td>
           <td><input data-field="trolley_capacity" type="number" min="0" value="${escapeHtml(asText(row.trolley_capacity))}" /></td>
           <td><input data-field="stillage_capacity" type="number" min="0" value="${escapeHtml(asText(row.stillage_capacity))}" /></td>
-          <td><input data-field="source" value="${escapeHtml(asText(row.source))}" /></td>
           <td><button class="button button-mini button-danger" data-action="delete-vehicle" data-index="${index}">Delete</button></td>
         </tr>
       `;
@@ -3200,7 +3196,6 @@ function createVehicleRow(seed) {
     tub_capacity: asText(seed.tub_capacity || 0),
     trolley_capacity: asText(seed.trolley_capacity || 0),
     stillage_capacity: asText(seed.stillage_capacity || 0),
-    source: asText(seed.source || "vehicle master export"),
     _extra: deepClone(seed._extra || {}),
     _metadataExtra: deepClone(seed._metadataExtra || {})
   };
