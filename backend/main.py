@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException
 
 from backend.api import dispatch as dispatch_api
 
@@ -28,7 +28,7 @@ def create_app(service: Any | None = None) -> FastAPI:
         return dispatch_api.list_batches(service=service)
 
     @app.post("/api/dispatch/batches")
-    def create_batch(payload: dict[str, Any]) -> dict[str, Any]:
+    def create_batch(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
         return _handle_value_error(lambda: dispatch_api.create_batch(payload, service=service))
 
     @app.get("/api/dispatch/batches/{batch_id}")
@@ -40,7 +40,7 @@ def create_app(service: Any | None = None) -> FastAPI:
         return _handle_value_error(lambda: dispatch_api.list_batch_orders(batch_id, service=service))
 
     @app.post("/api/dispatch/batches/{batch_id}/orders")
-    def save_batch_orders(batch_id: int, payload: Any) -> list[dict[str, Any]]:
+    def save_batch_orders(batch_id: int, payload: Any = Body(...)) -> list[dict[str, Any]]:
         return _handle_value_error(lambda: dispatch_api.save_batch_orders(batch_id, payload, service=service))
 
     @app.post("/api/dispatch/batches/{batch_id}/generate")
