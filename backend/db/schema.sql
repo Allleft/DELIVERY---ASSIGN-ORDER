@@ -42,7 +42,7 @@ CREATE TABLE `vehicles` (
   `rego` VARCHAR(32) NOT NULL,
   `vehicle_type` VARCHAR(64) NULL,
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
-  `kg_capacity` INT NOT NULL DEFAULT 0,
+  `kg_capacity` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   `pallet_capacity` INT NOT NULL DEFAULT 0,
   `tub_capacity` INT NOT NULL DEFAULT 0,
   `trolley_capacity` INT NOT NULL DEFAULT 0,
@@ -68,7 +68,7 @@ CREATE TABLE `dispatch_orders` (
   `designated_driver_id` BIGINT NULL,
   `pallet_count` INT NOT NULL DEFAULT 0,
   `bag_count` INT NOT NULL DEFAULT 0,
-  `kg_count` INT NOT NULL DEFAULT 0,
+  `kg_count` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   `window_start` TIME NULL,
   `window_end` TIME NULL,
   `notes` TEXT NULL,
@@ -95,7 +95,9 @@ CREATE TABLE `dispatch_plans` (
   `plan_id` VARCHAR(64) NOT NULL,
   `dispatch_date` DATE NOT NULL,
   `driver_id` BIGINT NULL,
+  `driver_name_snapshot` VARCHAR(128) NULL,
   `vehicle_id` BIGINT NULL,
+  `vehicle_rego_snapshot` VARCHAR(32) NULL,
   `order_ids_json` JSON NOT NULL,
   `total_orders` INT NOT NULL DEFAULT 0,
   `load_summary_json` JSON NULL,
@@ -125,10 +127,12 @@ CREATE TABLE `dispatch_order_assignments` (
   `assignment_id` BIGINT NOT NULL AUTO_INCREMENT,
   `batch_id` BIGINT NOT NULL,
   `order_id` VARCHAR(64) NOT NULL,
-  `plan_id` VARCHAR(64) NOT NULL,
+  `plan_id` VARCHAR(64) NULL,
   `dispatch_date` DATE NOT NULL,
   `driver_id` BIGINT NULL,
+  `driver_name_snapshot` VARCHAR(128) NULL,
   `vehicle_id` BIGINT NULL,
+  `vehicle_rego_snapshot` VARCHAR(32) NULL,
   `status` ENUM('ASSIGNED', 'UNASSIGNED', 'MANUALLY_ASSIGNED', 'REMOVED') NOT NULL DEFAULT 'ASSIGNED',
   `assignment_source` ENUM('AUTO', 'MANUAL') NOT NULL DEFAULT 'AUTO',
   `manual_reason` TEXT NULL,
@@ -153,7 +157,12 @@ CREATE TABLE `dispatch_order_assignments` (
   CONSTRAINT `fk_dispatch_order_assignments_driver`
     FOREIGN KEY (`driver_id`) REFERENCES `drivers` (`driver_id`),
   CONSTRAINT `fk_dispatch_order_assignments_vehicle`
-    FOREIGN KEY (`vehicle_id`) REFERENCES `vehicles` (`vehicle_id`)
+    FOREIGN KEY (`vehicle_id`) REFERENCES `vehicles` (`vehicle_id`),
+  CONSTRAINT `chk_dispatch_order_assignments_plan_status`
+    CHECK (
+      (`status` IN ('ASSIGNED', 'MANUALLY_ASSIGNED') AND `plan_id` IS NOT NULL)
+      OR (`status` IN ('UNASSIGNED', 'REMOVED'))
+    )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `dispatch_exceptions` (
@@ -190,4 +199,3 @@ CREATE TABLE `audit_log` (
   CONSTRAINT `fk_audit_log_batch`
     FOREIGN KEY (`batch_id`) REFERENCES `dispatch_batches` (`batch_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
