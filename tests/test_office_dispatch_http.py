@@ -5,6 +5,7 @@ from typing import Any
 
 from backend.db.repository import InMemoryDispatchRepository
 from backend.services.dispatch_service import DispatchBatchService
+from backend.services.geocoding import StaticAddressGeocoder
 
 _HTTP_IMPORT_ERROR: Exception | None = None
 
@@ -158,14 +159,43 @@ class OfficeDispatchHttpTest(unittest.TestCase):
         self.assertEqual(400, response.status_code)
         self.assertIn("vehicle_type", response.json()["detail"])
 
+    def test_generate_resolves_static_addresses_over_http(self) -> None:
+        geocoder = StaticAddressGeocoder(
+            mapping={
+                "Depot": (-37.7800, 144.9300),
+                "98-102 Hume Hwy, Somerton VIC 3062, Australia": (-37.6461, 144.9525),
+            }
+        )
+        service = DispatchBatchService(repository=InMemoryDispatchRepository(), address_geocoder=geocoder)
+        service.save_drivers([self._driver(driver_id=501, with_coordinates=False)])
+        service.save_vehicles([self._vehicle(vehicle_id=601)])
+        app = create_app(service=service)
+        with TestClient(app) as client:
+            created = client.post(
+                "/api/dispatch/batches",
+                json={"dispatch_date": "2026-05-03", "created_by": "http.user"},
+            ).json()
+            batch_id = int(created["batch_id"])
+            client.post(
+                f"/api/dispatch/batches/{batch_id}/orders",
+                json=[self._order(order_id=9901, with_coordinates=False)],
+            )
+            generated = client.post(f"/api/dispatch/batches/{batch_id}/generate")
+            self.assertEqual(200, generated.status_code)
+            payload = generated.json()
+            self.assertEqual({"plans", "order_assignments", "exceptions"}, set(payload.keys()))
+
     @staticmethod
-    def _order(order_id: int | str, urgency: str = "NORMAL") -> dict[str, Any]:
+    def _order(order_id: int | str, urgency: str = "NORMAL", with_coordinates: bool = True) -> dict[str, Any]:
+        lat = -37.8136 if with_coordinates else None
+        lng = 144.9631 if with_coordinates else None
+        address = f"Order-{order_id} Address" if with_coordinates else "98-102 Hume Hwy, Somerton VIC 3062, Australia"
         return {
             "order_id": order_id,
             "dispatch_date": "2026-05-03",
-            "delivery_address": f"Order-{order_id} Address",
-            "lat": -37.8136,
-            "lng": 144.9631,
+            "delivery_address": address,
+            "lat": lat,
+            "lng": lng,
             "zone_code": "LOCAL",
             "urgency": urgency,
             "window_start": "08:00",
@@ -181,7 +211,11 @@ class OfficeDispatchHttpTest(unittest.TestCase):
         }
 
     @staticmethod
-    def _driver(driver_id: int) -> dict[str, Any]:
+    def _driver(driver_id: int, with_coordinates: bool = True) -> dict[str, Any]:
+        start_lat = -37.8100 if with_coordinates else None
+        start_lng = 144.9600 if with_coordinates else None
+        end_lat = -37.8100 if with_coordinates else None
+        end_lng = 144.9600 if with_coordinates else None
         return {
             "driver_id": driver_id,
             "shift_start": "07:00",
@@ -192,10 +226,10 @@ class OfficeDispatchHttpTest(unittest.TestCase):
             "preferred_zone_codes": ["LOCAL"],
             "historical_vehicle_ids": [],
             "branch_no": None,
-            "start_lat": -37.8100,
-            "start_lng": 144.9600,
-            "end_lat": -37.8100,
-            "end_lng": 144.9600,
+            "start_lat": start_lat,
+            "start_lng": start_lng,
+            "end_lat": end_lat,
+            "end_lng": end_lng,
             "metadata": {"name": f"Driver {driver_id}"},
         }
 

@@ -5,6 +5,7 @@ from datetime import date
 
 from backend.db.repository import InMemoryDispatchRepository
 from backend.services.dispatch_service import DispatchBatchService
+from backend.services.geocoding import StaticAddressGeocoder
 
 
 class OfficeDispatchServiceTest(unittest.TestCase):
@@ -142,6 +143,50 @@ class OfficeDispatchServiceTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "No active vehicles"):
             self.service.generate_dispatch_for_batch(int(batch_no_vehicles["batch_id"]))
 
+    def test_generate_resolves_order_and_driver_coordinates_and_persists(self) -> None:
+        geocoder = StaticAddressGeocoder(
+            mapping={
+                "Depot": (-37.7800, 144.9300),
+                "98-102 Hume Hwy, Somerton VIC 3062, Australia": (-37.6461, 144.9525),
+            }
+        )
+        service = DispatchBatchService(repository=self.repo, address_geocoder=geocoder)
+        batch = service.create_dispatch_batch("2026-05-06", created_by="office.user")
+        batch_id = int(batch["batch_id"])
+
+        self.repo.seed_driver(self._driver(driver_id=31, with_coordinates=False))
+        self.repo.seed_vehicle(self._vehicle(vehicle_id=301, rego="1GEO31"))
+        service.save_batch_orders(batch_id, [self._order(order_id=6101, with_coordinates=False)])
+
+        payload = service.generate_dispatch_for_batch(batch_id)
+
+        self.assertEqual({"plans", "order_assignments", "exceptions"}, set(payload.keys()))
+        persisted_order = service.list_batch_orders(batch_id)[0]
+        self.assertAlmostEqual(-37.6461, float(persisted_order["lat"]), places=4)
+        self.assertAlmostEqual(144.9525, float(persisted_order["lng"]), places=4)
+        persisted_driver = service.list_drivers()[0]
+        self.assertAlmostEqual(-37.7800, float(persisted_driver["start_lat"]), places=4)
+        self.assertAlmostEqual(144.9300, float(persisted_driver["start_lng"]), places=4)
+        self.assertAlmostEqual(-37.7800, float(persisted_driver["end_lat"]), places=4)
+        self.assertAlmostEqual(144.9300, float(persisted_driver["end_lng"]), places=4)
+
+    def test_generate_with_unresolved_address_does_not_crash_and_keeps_contract(self) -> None:
+        geocoder = StaticAddressGeocoder(mapping={"Depot": (-37.7800, 144.9300)})
+        service = DispatchBatchService(repository=self.repo, address_geocoder=geocoder)
+        batch = service.create_dispatch_batch("2026-05-07", created_by="office.user")
+        batch_id = int(batch["batch_id"])
+
+        self.repo.seed_driver(self._driver(driver_id=41, with_coordinates=False))
+        self.repo.seed_vehicle(self._vehicle(vehicle_id=401, rego="1GEO41"))
+        unresolved_order = self._order(order_id=6201, with_coordinates=False)
+        unresolved_order["delivery_address"] = "Unknown Address For Geocoder"
+        service.save_batch_orders(batch_id, [unresolved_order])
+
+        payload = service.generate_dispatch_for_batch(batch_id)
+
+        self.assertEqual({"plans", "order_assignments", "exceptions"}, set(payload.keys()))
+        self.assertGreaterEqual(len(payload["exceptions"]), 1)
+
     def _seed_minimum_resources(self) -> None:
         self.repo.seed_driver(self._driver(driver_id=1))
         self.repo.seed_driver(self._driver(driver_id=2, preferred_zone_codes=("WEST",)))
@@ -149,13 +194,16 @@ class OfficeDispatchServiceTest(unittest.TestCase):
         self.repo.seed_vehicle(self._vehicle(vehicle_id=102, rego="1BBB22"))
 
     @staticmethod
-    def _order(order_id: int | str, urgency: str = "NORMAL") -> dict[str, object]:
+    def _order(order_id: int | str, urgency: str = "NORMAL", with_coordinates: bool = True) -> dict[str, object]:
+        lat = -37.8136 if with_coordinates else None
+        lng = 144.9631 if with_coordinates else None
+        address = f"Order-{order_id} Address" if with_coordinates else "98-102 Hume Hwy, Somerton VIC 3062, Australia"
         return {
             "order_id": order_id,
             "dispatch_date": "2026-05-01",
-            "delivery_address": f"Order-{order_id} Address",
-            "lat": -37.8136,
-            "lng": 144.9631,
+            "delivery_address": address,
+            "lat": lat,
+            "lng": lng,
             "zone_code": "LOCAL",
             "urgency": urgency,
             "window_start": "08:00",
@@ -171,7 +219,15 @@ class OfficeDispatchServiceTest(unittest.TestCase):
         }
 
     @staticmethod
-    def _driver(driver_id: int, preferred_zone_codes: tuple[str, ...] = ("LOCAL",)) -> dict[str, object]:
+    def _driver(
+        driver_id: int,
+        preferred_zone_codes: tuple[str, ...] = ("LOCAL",),
+        with_coordinates: bool = True,
+    ) -> dict[str, object]:
+        start_lat = -37.8100 if with_coordinates else None
+        start_lng = 144.9600 if with_coordinates else None
+        end_lat = -37.8100 if with_coordinates else None
+        end_lng = 144.9600 if with_coordinates else None
         return {
             "driver_id": driver_id,
             "shift_start": "07:00",
@@ -182,10 +238,10 @@ class OfficeDispatchServiceTest(unittest.TestCase):
             "preferred_zone_codes": list(preferred_zone_codes),
             "historical_vehicle_ids": [],
             "branch_no": None,
-            "start_lat": -37.8100,
-            "start_lng": 144.9600,
-            "end_lat": -37.8100,
-            "end_lng": 144.9600,
+            "start_lat": start_lat,
+            "start_lng": start_lng,
+            "end_lat": end_lat,
+            "end_lng": end_lng,
             "metadata": {"name": f"Driver {driver_id}"},
         }
 

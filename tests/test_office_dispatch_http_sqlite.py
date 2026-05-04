@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -29,11 +30,28 @@ class OfficeDispatchHttpSqliteRuntimeTest(unittest.TestCase):
     def setUp(self) -> None:
         self._temp_dir = tempfile.TemporaryDirectory()
         self.db_path = Path(self._temp_dir.name) / "runtime.sqlite3"
-        self._env_patch = mock.patch.dict(os.environ, {"OFFICE_DISPATCH_DB_PATH": str(self.db_path)}, clear=False)
+        self.geocoder_path = Path(self._temp_dir.name) / "static-geocoder.json"
+        self.geocoder_path.write_text(
+            json.dumps(
+                {
+                    "Depot": [-37.7800, 144.9300],
+                    "98-102 Hume Hwy, Somerton VIC 3062, Australia": [-37.6461, 144.9525],
+                }
+            ),
+            encoding="utf-8",
+        )
+        self._env_patch = mock.patch.dict(
+            os.environ,
+            {
+                "OFFICE_DISPATCH_DB_PATH": str(self.db_path),
+                "OFFICE_DISPATCH_STATIC_GEOCODER_PATH": str(self.geocoder_path),
+            },
+            clear=False,
+        )
         self._env_patch.start()
 
         seed_repo = SQLiteDispatchRepository(self.db_path)
-        seed_repo.seed_driver(self._driver(driver_id=101))
+        seed_repo.seed_driver(self._driver(driver_id=101, with_coordinates=False))
         seed_repo.seed_vehicle(self._vehicle(vehicle_id=901))
         seed_repo.close()
 
@@ -52,7 +70,7 @@ class OfficeDispatchHttpSqliteRuntimeTest(unittest.TestCase):
 
             save_orders = client.post(
                 f"/api/dispatch/batches/{batch_id}/orders",
-                json=[self._order(order_id=7001), self._order(order_id=7002, urgency="URGENT")],
+                json=[self._order(order_id=7001, with_coordinates=False), self._order(order_id=7002, urgency="URGENT", with_coordinates=False)],
             )
             self.assertEqual(200, save_orders.status_code)
 
@@ -80,13 +98,16 @@ class OfficeDispatchHttpSqliteRuntimeTest(unittest.TestCase):
         self.assertGreaterEqual(len(stored_result["order_assignments"]), 1)
 
     @staticmethod
-    def _order(order_id: int | str, urgency: str = "NORMAL") -> dict[str, Any]:
+    def _order(order_id: int | str, urgency: str = "NORMAL", with_coordinates: bool = True) -> dict[str, Any]:
+        lat = -37.8136 if with_coordinates else None
+        lng = 144.9631 if with_coordinates else None
+        address = f"Order-{order_id} Address" if with_coordinates else "98-102 Hume Hwy, Somerton VIC 3062, Australia"
         return {
             "order_id": order_id,
             "dispatch_date": "2026-05-11",
-            "delivery_address": f"Order-{order_id} Address",
-            "lat": -37.8136,
-            "lng": 144.9631,
+            "delivery_address": address,
+            "lat": lat,
+            "lng": lng,
             "zone_code": "LOCAL",
             "urgency": urgency,
             "window_start": "08:00",
@@ -102,7 +123,11 @@ class OfficeDispatchHttpSqliteRuntimeTest(unittest.TestCase):
         }
 
     @staticmethod
-    def _driver(driver_id: int) -> dict[str, Any]:
+    def _driver(driver_id: int, with_coordinates: bool = True) -> dict[str, Any]:
+        start_lat = -37.8100 if with_coordinates else None
+        start_lng = 144.9600 if with_coordinates else None
+        end_lat = -37.8100 if with_coordinates else None
+        end_lng = 144.9600 if with_coordinates else None
         return {
             "driver_id": driver_id,
             "shift_start": "07:00",
@@ -113,10 +138,10 @@ class OfficeDispatchHttpSqliteRuntimeTest(unittest.TestCase):
             "preferred_zone_codes": ["LOCAL"],
             "historical_vehicle_ids": [],
             "branch_no": None,
-            "start_lat": -37.8100,
-            "start_lng": 144.9600,
-            "end_lat": -37.8100,
-            "end_lng": 144.9600,
+            "start_lat": start_lat,
+            "start_lng": start_lng,
+            "end_lat": end_lat,
+            "end_lng": end_lng,
             "metadata": {"name": f"Driver {driver_id}"},
         }
 

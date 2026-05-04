@@ -7,6 +7,7 @@ from typing import Any
 
 from backend.db.sqlite_repository import SQLiteDispatchRepository
 from backend.services.dispatch_service import DispatchBatchService
+from backend.services.geocoding import StaticAddressGeocoder
 
 
 class SQLiteDispatchRepositoryTest(unittest.TestCase):
@@ -132,14 +133,46 @@ class SQLiteDispatchRepositoryTest(unittest.TestCase):
         self.assertEqual({"plans", "order_assignments", "exceptions"}, set(result.keys()))
         self.assertEqual("GENERATED", service.get_dispatch_batch(batch_id)["status"])
 
+    def test_sqlite_persists_resolved_coordinates_after_reopen(self) -> None:
+        geocoder = StaticAddressGeocoder(
+            mapping={
+                "Depot": (-37.7800, 144.9300),
+                "98-102 Hume Hwy, Somerton VIC 3062, Australia": (-37.6461, 144.9525),
+            }
+        )
+        service = DispatchBatchService(repository=self.repo, address_geocoder=geocoder)
+        batch = service.create_dispatch_batch("2026-05-12", created_by="sqlite.user")
+        batch_id = int(batch["batch_id"])
+        self.repo.seed_driver(self._driver(driver_id=66, is_available=True, with_coordinates=False))
+        self.repo.seed_vehicle(self._vehicle(vehicle_id=266, is_available=True))
+        service.save_batch_orders(batch_id, [self._order(order_id=9201, with_coordinates=False)])
+        service.generate_dispatch_for_batch(batch_id)
+
+        self.repo.close()
+        reopened = SQLiteDispatchRepository(self.db_path)
+        try:
+            persisted_order = reopened.list_batch_orders(batch_id)[0]
+            persisted_driver = reopened.list_drivers()[0]
+        finally:
+            reopened.close()
+        self.repo = SQLiteDispatchRepository(self.db_path)
+
+        self.assertAlmostEqual(-37.6461, float(persisted_order["lat"]), places=4)
+        self.assertAlmostEqual(144.9525, float(persisted_order["lng"]), places=4)
+        self.assertAlmostEqual(-37.7800, float(persisted_driver["start_lat"]), places=4)
+        self.assertAlmostEqual(144.9300, float(persisted_driver["start_lng"]), places=4)
+
     @staticmethod
-    def _order(order_id: int | str, urgency: str = "NORMAL") -> dict[str, Any]:
+    def _order(order_id: int | str, urgency: str = "NORMAL", with_coordinates: bool = True) -> dict[str, Any]:
+        lat = -37.8136 if with_coordinates else None
+        lng = 144.9631 if with_coordinates else None
+        address = f"Order-{order_id} Address" if with_coordinates else "98-102 Hume Hwy, Somerton VIC 3062, Australia"
         return {
             "order_id": order_id,
             "dispatch_date": "2026-05-10",
-            "delivery_address": f"Order-{order_id} Address",
-            "lat": -37.8136,
-            "lng": 144.9631,
+            "delivery_address": address,
+            "lat": lat,
+            "lng": lng,
             "zone_code": "LOCAL",
             "urgency": urgency,
             "window_start": "08:00",
@@ -155,7 +188,11 @@ class SQLiteDispatchRepositoryTest(unittest.TestCase):
         }
 
     @staticmethod
-    def _driver(driver_id: int, is_available: bool) -> dict[str, Any]:
+    def _driver(driver_id: int, is_available: bool, with_coordinates: bool = True) -> dict[str, Any]:
+        start_lat = -37.8100 if with_coordinates else None
+        start_lng = 144.9600 if with_coordinates else None
+        end_lat = -37.8100 if with_coordinates else None
+        end_lng = 144.9600 if with_coordinates else None
         return {
             "driver_id": driver_id,
             "shift_start": "07:00",
@@ -166,10 +203,10 @@ class SQLiteDispatchRepositoryTest(unittest.TestCase):
             "preferred_zone_codes": ["LOCAL"],
             "historical_vehicle_ids": [],
             "branch_no": None,
-            "start_lat": -37.8100,
-            "start_lng": 144.9600,
-            "end_lat": -37.8100,
-            "end_lng": 144.9600,
+            "start_lat": start_lat,
+            "start_lng": start_lng,
+            "end_lat": end_lat,
+            "end_lng": end_lng,
             "metadata": {"name": f"Driver {driver_id}"},
         }
 
