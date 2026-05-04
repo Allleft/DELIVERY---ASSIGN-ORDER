@@ -44,6 +44,10 @@
     return requestJson("GET", `/api/dispatch/batches/${encodeURIComponent(asText(batchId).trim())}/orders`);
   }
 
+  async function getBatchResult(batchId) {
+    return requestJson("GET", `/api/dispatch/batches/${encodeURIComponent(asText(batchId).trim())}/result`);
+  }
+
   async function generateBatchPlan(batchId) {
     return requestJson("POST", `/api/dispatch/batches/${encodeURIComponent(asText(batchId).trim())}/generate`);
   }
@@ -102,6 +106,7 @@
     saveVehicles,
     listVehicles,
     listBatchOrders,
+    getBatchResult,
     generateBatchPlan
   });
 })(typeof window !== "undefined" ? window : globalThis);

@@ -60,6 +60,20 @@ class DispatchBatchService:
     def list_vehicles(self) -> list[dict[str, Any]]:
         return self.repository.list_vehicles()
 
+    def get_generated_result(self, batch_id: int) -> dict[str, Any]:
+        self._require_batch(batch_id)
+        payload = self.repository.get_generated_results(batch_id)
+        if not isinstance(payload, dict):
+            payload = {}
+        plans = payload.get("plans")
+        assignments = payload.get("order_assignments")
+        exceptions = payload.get("exceptions")
+        return {
+            "plans": list(plans) if isinstance(plans, list) else [],
+            "order_assignments": list(assignments) if isinstance(assignments, list) else [],
+            "exceptions": list(exceptions) if isinstance(exceptions, list) else [],
+        }
+
     def generate_dispatch_for_batch(self, batch_id: int) -> dict[str, Any]:
         batch = self._require_batch(batch_id)
         raw_orders = self.repository.list_batch_orders(batch_id)
@@ -152,6 +166,10 @@ def save_vehicles(vehicles: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def list_vehicles() -> list[dict[str, Any]]:
     return _default_service.list_vehicles()
+
+
+def get_generated_result(batch_id: int) -> dict[str, Any]:
+    return _default_service.get_generated_result(batch_id=batch_id)
 
 
 def generate_dispatch_for_batch(batch_id: int) -> dict[str, Any]:

@@ -132,6 +132,8 @@ function bootstrap() {
 
 function bindEvents() {
   onIf("loadSampleBtn", "click", loadSampleData);
+  onIf("loadSavedBatchesBtn", "click", handleLoadSavedBatches);
+  onIf("loadSelectedBatchBtn", "click", handleLoadSelectedBatch);
   onIf("runPlannerBtn", "click", handleRunPlanner);
   onIf("editInputsBtn", "click", handleEditInputs);
   onIf("regeneratePlanBtn", "click", handleRunPlanner);
@@ -925,6 +927,109 @@ function loadSampleData() {
   banner("Sample data loaded. You can generate a plan now.", "info");
 }
 
+async function handleLoadSavedBatches() {
+  const api = getBackendApiClient();
+  if (!api) {
+    banner("Backend API client is unavailable. Cannot load saved batches.", "error");
+    return;
+  }
+  try {
+    const batches = safeArray(await api.listBatches());
+    populateSavedBatchSelector(batches);
+    if (batches.length === 0) {
+      banner("No saved batches found in backend storage.", "info");
+      return;
+    }
+    banner(`Loaded ${batches.length} saved batch(es). Select one and load it.`, "success");
+  } catch (error) {
+    banner(buildSavedBatchLoadWarning("list saved batches", error), "error");
+  }
+}
+
+async function handleLoadSelectedBatch() {
+  const selector = get("savedBatchSelect");
+  const batchId = asText(selector?.value).trim();
+  if (batchId === "") {
+    banner("Select a saved batch first.", "info");
+    return;
+  }
+  const api = getBackendApiClient();
+  if (!api) {
+    banner("Backend API client is unavailable. Cannot load selected batch.", "error");
+    return;
+  }
+
+  try {
+    const batch = await api.getBatch(batchId);
+    const orders = safeArray(await api.listBatchOrders(batchId));
+    const drivers = safeArray(await api.listDrivers());
+    const vehicles = safeArray(await api.listVehicles());
+    const rawResult = await api.getBatchResult(batchId);
+    const normalizedResult = normalizeResultPayload(rawResult);
+
+    const restoredSnapshot = {
+      config: deepClone(appState.snapshot?.config || DEFAULT_CONFIG),
+      orders: orders.map((item) => deepClone(item)),
+      drivers: drivers.map((item) => deepClone(item)),
+      vehicles: vehicles.map((item) => deepClone(item))
+    };
+
+    applySnapshotToState(restoredSnapshot);
+    appState.result = normalizedResult;
+    appState.lastGeneratedAt = isBlank(batch?.generated_at) ? null : asText(batch.generated_at);
+    appState.isResultStale = false;
+    appState.reviewSearchQuery = "";
+    appState.reviewFilter = "all";
+
+    const hasResult =
+      normalizedResult.plans.length > 0 ||
+      normalizedResult.order_assignments.length > 0 ||
+      normalizedResult.exceptions.length > 0;
+
+    if (hasResult) {
+      appState.uiMode = "review";
+      applyUiMode();
+      renderReviewDashboard(appState.result);
+      renderInputSummaryPanel();
+      banner(`Loaded saved batch #${batchId} with generated result.`, "success");
+      return;
+    }
+
+    appState.uiMode = "input";
+    applyUiMode();
+    renderResult(appState.result);
+    renderInputSummaryPanel();
+    banner(`Loaded saved batch #${batchId}. No generated result was saved.`, "info");
+  } catch (error) {
+    banner(buildSavedBatchLoadWarning("load selected batch", error), "error");
+  }
+}
+
+function populateSavedBatchSelector(batches) {
+  const selector = get("savedBatchSelect");
+  if (!selector) return;
+  const options = ['<option value="">Select Batch</option>'];
+  for (const batch of safeArray(batches)) {
+    const batchId = asText(batch?.batch_id).trim();
+    if (batchId === "") continue;
+    const dispatchDate = asText(batch?.dispatch_date).trim() || "-";
+    const status = asText(batch?.status).trim() || "UNKNOWN";
+    const generatedAt = asText(batch?.generated_at).trim();
+    const generatedLabel = generatedAt === "" ? "not generated" : "generated";
+    const label = `#${batchId} | ${dispatchDate} | ${status} | ${generatedLabel}`;
+    options.push(`<option value="${escapeHtml(batchId)}">${escapeHtml(label)}</option>`);
+  }
+  selector.innerHTML = options.join("");
+}
+
+function buildSavedBatchLoadWarning(step, error) {
+  const detail = asText(error?.payload?.detail || error?.message).trim();
+  if (detail !== "") {
+    return `Failed to ${step} (${detail}). Current state kept unchanged.`;
+  }
+  return `Failed to ${step}. Current state kept unchanged.`;
+}
+
 function renderWorkbench() {
   renderConfigInputs();
   renderOrdersTable();
@@ -939,6 +1044,9 @@ function applyUiMode() {
   setHidden("reviewShell", !isReviewMode);
 
   setHidden("loadSampleBtn", isReviewMode);
+  setHidden("loadSavedBatchesBtn", isReviewMode);
+  setHidden("savedBatchSelect", isReviewMode);
+  setHidden("loadSelectedBatchBtn", isReviewMode);
   setHidden("runPlannerBtn", isReviewMode);
   setHidden("editInputsBtn", !isReviewMode);
   setHidden("regeneratePlanBtn", !isReviewMode);

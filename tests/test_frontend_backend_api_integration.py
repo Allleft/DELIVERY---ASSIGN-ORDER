@@ -68,6 +68,7 @@ process.stdout.write(JSON.stringify({
   has_listDrivers: typeof api.listDrivers === 'function',
   has_saveVehicles: typeof api.saveVehicles === 'function',
   has_listVehicles: typeof api.listVehicles === 'function',
+  has_getBatchResult: typeof api.getBatchResult === 'function',
   has_generateBatchPlan: typeof api.generateBatchPlan === 'function',
   has_getBatch: typeof api.getBatch === 'function',
   has_listBatches: typeof api.listBatches === 'function',
@@ -82,11 +83,78 @@ process.stdout.write(JSON.stringify({
         self.assertTrue(result["has_listDrivers"])
         self.assertTrue(result["has_saveVehicles"])
         self.assertTrue(result["has_listVehicles"])
+        self.assertTrue(result["has_getBatchResult"])
         self.assertTrue(result["has_generateBatchPlan"])
         self.assertTrue(result["has_getBatch"])
         self.assertTrue(result["has_listBatches"])
         self.assertTrue(result["has_listBatchOrders"])
         self.assertEqual("http://127.0.0.1:8000", result["default_base"])
+
+    def test_load_selected_saved_batch_restores_snapshot_and_result(self) -> None:
+        result = _run_frontend_probe(
+            """
+(async () => {
+  const calls = [];
+  let capturedSnapshot = null;
+  let renderedResult = null;
+  let bannerMessage = '';
+  context.bootstrap();
+  context.applyUiMode = () => {};
+  context.renderInputSummaryPanel = () => {};
+  context.renderReviewDashboard = (result) => { renderedResult = result; };
+  context.applySnapshotToState = (snapshot) => { capturedSnapshot = snapshot; };
+  context.banner = (msg) => { bannerMessage = String(msg || ''); };
+  const selectNode = context.document.getElementById('savedBatchSelect');
+  selectNode.value = '42';
+  context.OfficeDispatchBackendApi = {
+    getBatch: async (batchId) => {
+      calls.push(`getBatch:${batchId}`);
+      return { batch_id: Number(batchId), generated_at: '2026-05-05T09:00:00' };
+    },
+    listBatchOrders: async (batchId) => {
+      calls.push(`listBatchOrders:${batchId}`);
+      return [{ order_id: 5001, dispatch_date: '2026-05-05', delivery_address: 'A', postcode: '3000', zone_code: 'LOCAL', urgency: 'NORMAL', window_start: '08:00', window_end: '10:00' }];
+    },
+    listDrivers: async () => {
+      calls.push('listDrivers');
+      return [{ driver_id: 1, shift_start: '07:00', shift_end: '17:00', is_available: true, start_location: 'Depot', end_location: 'Depot', preferred_zone_codes: [] }];
+    },
+    listVehicles: async () => {
+      calls.push('listVehicles');
+      return [{ vehicle_id: 2, vehicle_type: 'van', is_available: true, kg_capacity: 0, pallet_capacity: 1, tub_capacity: 0, trolley_capacity: 0, stillage_capacity: 0 }];
+    },
+    getBatchResult: async (batchId) => {
+      calls.push(`getBatchResult:${batchId}`);
+      return { plans: [{ plan_id: 'PLAN-SAVED' }], order_assignments: [{ order_id: 5001, plan_id: 'PLAN-SAVED' }], exceptions: [] };
+    }
+  };
+  await context.handleLoadSelectedBatch();
+  process.stdout.write(JSON.stringify({
+    calls,
+    restored_orders: Array.isArray(capturedSnapshot?.orders) ? capturedSnapshot.orders.length : -1,
+    restored_drivers: Array.isArray(capturedSnapshot?.drivers) ? capturedSnapshot.drivers.length : -1,
+    restored_vehicles: Array.isArray(capturedSnapshot?.vehicles) ? capturedSnapshot.vehicles.length : -1,
+    restored_plan_id: renderedResult?.plans?.[0]?.plan_id || null,
+    banner_mentions_loaded: bannerMessage.toLowerCase().includes('loaded saved batch')
+  }));
+})();
+"""
+        )
+        self.assertEqual(
+            [
+                "getBatch:42",
+                "listBatchOrders:42",
+                "listDrivers",
+                "listVehicles",
+                "getBatchResult:42",
+            ],
+            result["calls"],
+        )
+        self.assertEqual(1, result["restored_orders"])
+        self.assertEqual(1, result["restored_drivers"])
+        self.assertEqual(1, result["restored_vehicles"])
+        self.assertEqual("PLAN-SAVED", result["restored_plan_id"])
+        self.assertTrue(result["banner_mentions_loaded"])
 
     def test_generate_plan_backend_success_syncs_drivers_vehicles_before_generate(self) -> None:
         result = _run_frontend_probe(

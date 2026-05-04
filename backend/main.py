@@ -63,6 +63,15 @@ def create_app(service: Any | None = None) -> FastAPI:
             )
         )
 
+    @app.get("/api/dispatch/batches/{batch_id}/result")
+    def get_batch_result(batch_id: int) -> dict[str, Any]:
+        return _handle_value_error(
+            lambda: _resolve_and_call(
+                service,
+                lambda resolved_service: dispatch_api.get_batch_result(batch_id, service=resolved_service),
+            )
+        )
+
     @app.post("/api/dispatch/batches/{batch_id}/orders")
     def save_batch_orders(batch_id: int, payload: Any = Body(...)) -> list[dict[str, Any]]:
         return _handle_value_error(

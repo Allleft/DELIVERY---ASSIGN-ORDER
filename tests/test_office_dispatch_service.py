@@ -55,6 +55,31 @@ class OfficeDispatchServiceTest(unittest.TestCase):
         self.assertEqual([20, 21], [row["driver_id"] for row in listed_drivers])
         self.assertEqual([220, 221], [row["vehicle_id"] for row in listed_vehicles])
 
+    def test_get_generated_result_missing_batch_raises_value_error(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Missing batch"):
+            self.service.get_generated_result(999)
+
+    def test_get_generated_result_empty_contract_for_draft_batch(self) -> None:
+        batch = self.service.create_dispatch_batch("2026-05-01", created_by="office.user")
+        payload = self.service.get_generated_result(int(batch["batch_id"]))
+
+        self.assertEqual({"plans", "order_assignments", "exceptions"}, set(payload.keys()))
+        self.assertEqual([], payload["plans"])
+        self.assertEqual([], payload["order_assignments"])
+        self.assertEqual([], payload["exceptions"])
+
+    def test_get_generated_result_returns_saved_payload(self) -> None:
+        batch = self.service.create_dispatch_batch("2026-05-01", created_by="office.user")
+        batch_id = int(batch["batch_id"])
+        self._seed_minimum_resources()
+        self.service.save_batch_orders(batch_id, [self._order(order_id=4101), self._order(order_id=4102, urgency="URGENT")])
+        self.service.generate_dispatch_for_batch(batch_id)
+
+        payload = self.service.get_generated_result(batch_id)
+
+        self.assertEqual({"plans", "order_assignments", "exceptions"}, set(payload.keys()))
+        self.assertGreaterEqual(len(payload["order_assignments"]), 1)
+
     def test_save_orders_replaces_existing_and_resets_generated_status(self) -> None:
         batch = self.service.create_dispatch_batch("2026-05-01", created_by="office.user")
         batch_id = int(batch["batch_id"])

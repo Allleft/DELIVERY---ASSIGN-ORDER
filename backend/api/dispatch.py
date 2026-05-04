@@ -48,6 +48,8 @@ class _DispatchBatchServiceProtocol(Protocol):
 
     def list_vehicles(self) -> list[dict[str, Any]]: ...
 
+    def get_generated_result(self, batch_id: int) -> dict[str, Any]: ...
+
     def generate_dispatch_for_batch(self, batch_id: int) -> dict[str, Any]: ...
 
 
@@ -119,6 +121,13 @@ def list_vehicles(service: _DispatchBatchServiceProtocol | None = None) -> list[
     if service is not None:
         return service.list_vehicles()
     return service_module.list_vehicles()
+
+
+def get_batch_result(batch_id: int | str, service: _DispatchBatchServiceProtocol | None = None) -> dict[str, Any]:
+    normalized_batch_id = _normalize_batch_id(batch_id)
+    if service is not None:
+        return service.get_generated_result(normalized_batch_id)
+    return service_module.get_generated_result(normalized_batch_id)
 
 
 def generate_batch_plan(batch_id: int | str, service: _DispatchBatchServiceProtocol | None = None) -> dict[str, Any]:

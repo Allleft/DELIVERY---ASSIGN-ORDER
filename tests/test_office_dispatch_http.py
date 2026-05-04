@@ -102,6 +102,24 @@ class OfficeDispatchHttpTest(unittest.TestCase):
         payload = response.json()
         self.assertEqual({"plans", "order_assignments", "exceptions"}, set(payload.keys()))
 
+    def test_get_batch_result_returns_contract_keys(self) -> None:
+        created = self.client.post(
+            "/api/dispatch/batches",
+            json={"dispatch_date": "2026-05-03", "created_by": "http.user"},
+        ).json()
+        batch_id = int(created["batch_id"])
+
+        response = self.client.get(f"/api/dispatch/batches/{batch_id}/result")
+
+        self.assertEqual(200, response.status_code)
+        payload = response.json()
+        self.assertEqual({"plans", "order_assignments", "exceptions"}, set(payload.keys()))
+
+    def test_get_batch_result_missing_batch_returns_404(self) -> None:
+        response = self.client.get("/api/dispatch/batches/999/result")
+        self.assertEqual(404, response.status_code)
+        self.assertIn("Missing batch", response.json()["detail"])
+
     def test_save_and_list_drivers(self) -> None:
         payload = [self._driver(driver_id=71), self._driver(driver_id=72)]
 

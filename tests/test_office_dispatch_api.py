@@ -5,6 +5,7 @@ import unittest
 from backend.api.dispatch import (
     create_batch,
     generate_batch_plan,
+    get_batch_result,
     get_batch,
     list_batch_orders,
     list_drivers,
@@ -78,6 +79,18 @@ class OfficeDispatchApiTest(unittest.TestCase):
         result = generate_batch_plan(batch_id, service=self.service)
 
         self.assertEqual({"plans", "order_assignments", "exceptions"}, set(result.keys()))
+
+    def test_get_batch_result_returns_empty_contract_for_draft_batch(self) -> None:
+        batch = create_batch({"dispatch_date": "2026-05-02", "created_by": "api.user"}, service=self.service)
+
+        result = get_batch_result(int(batch["batch_id"]), service=self.service)
+
+        self.assertEqual({"plans", "order_assignments", "exceptions"}, set(result.keys()))
+        self.assertEqual([], result["plans"])
+
+    def test_get_batch_result_missing_id_propagates_value_error(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Missing batch"):
+            get_batch_result(999, service=self.service)
 
     def test_get_batch_missing_id_propagates_value_error(self) -> None:
         with self.assertRaisesRegex(ValueError, "Missing batch"):
