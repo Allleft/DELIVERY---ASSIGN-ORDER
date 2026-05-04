@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import Body, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api import dispatch as dispatch_api
 from backend.services.service_factory import build_runtime_dispatch_service_from_env
@@ -18,6 +19,14 @@ from backend.services.service_factory import build_runtime_dispatch_service_from
 def create_app(service: Any | None = None) -> FastAPI:
     """Create a FastAPI app wired to thin dispatch API wrapper functions."""
     app = FastAPI(title="Office Dispatch Workbench API", version="0.1.0")
+    # Development CORS policy for local frontend integration (Phase 3A).
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.get("/health")
     def health() -> dict[str, str]:

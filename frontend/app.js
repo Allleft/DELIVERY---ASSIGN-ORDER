@@ -1379,7 +1379,7 @@ function handleExportSnapshot() {
   banner("Snapshot exported.", "success");
 }
 
-function handleRunPlanner() {
+async function handleRunPlanner() {
   const report = validateViewModel(appState.view, { normalize: true });
   appState.validation = report;
   renderValidationPanel(report);
@@ -1390,7 +1390,19 @@ function handleRunPlanner() {
   }
   appState.snapshot = viewModelToSnapshot(appState.view);
   renderSnapshotEditor();
-  appState.result = planDispatch(appState.snapshot);
+  let usedBackendResult = false;
+  let backendWarning = "";
+  try {
+    const backendResult = await generatePlanViaBackendApi(appState.snapshot);
+    if (!hasDispatchResultContract(backendResult)) {
+      throw new Error("Backend response did not match result contract.");
+    }
+    appState.result = normalizeResultPayload(backendResult);
+    usedBackendResult = true;
+  } catch (error) {
+    backendWarning = buildBackendFallbackWarning(error);
+    appState.result = planDispatch(appState.snapshot);
+  }
   appState.uiMode = "review";
   appState.isResultStale = false;
   appState.lastGeneratedAt = new Date().toISOString();
@@ -1398,10 +1410,112 @@ function handleRunPlanner() {
   renderReviewDashboard(appState.result);
   renderInputSummaryPanel();
   const warningSuffix = report.warnings.length > 0 ? ` and auto-normalized ${report.warnings.length} input value(s)` : "";
+  if (usedBackendResult) {
+    banner(
+      `Generated ${appState.result.plans.length} plan(s), ${appState.result.order_assignments.length} order assignment(s), ${appState.result.exceptions.length} exception(s)${warningSuffix}.`,
+      "success"
+    );
+    return;
+  }
   banner(
-    `Generated ${appState.result.plans.length} plan(s), ${appState.result.order_assignments.length} order assignment(s), ${appState.result.exceptions.length} exception(s)${warningSuffix}.`,
-    "success"
+    `${backendWarning} Generated ${appState.result.plans.length} plan(s), ${appState.result.order_assignments.length} order assignment(s), ${appState.result.exceptions.length} exception(s)${warningSuffix}.`,
+    "info"
   );
+}
+
+async function generatePlanViaBackendApi(snapshot) {
+  const api = getBackendApiClient();
+  if (!api) {
+    throw new Error("Backend API client is unavailable.");
+  }
+  const normalizedOrders = safeArray(snapshot.orders).map((order) => normalizeOrderForBackend(order));
+  const dispatchDate = deriveDispatchDateFromOrders(normalizedOrders);
+  const batch = await api.createBatch({
+    dispatch_date: dispatchDate,
+    created_by: "frontend.user",
+    notes: "Generated from frontend workbench"
+  });
+  const batchId = batch?.batch_id;
+  if (isBlank(batchId)) {
+    throw new Error("Backend did not return batch_id.");
+  }
+  await api.saveBatchOrders(batchId, normalizedOrders);
+  return api.generateBatchPlan(batchId);
+}
+
+function getBackendApiClient() {
+  if (typeof OfficeDispatchBackendApi === "object" && OfficeDispatchBackendApi !== null) return OfficeDispatchBackendApi;
+  if (typeof window !== "undefined" && typeof window.OfficeDispatchBackendApi === "object" && window.OfficeDispatchBackendApi !== null) {
+    return window.OfficeDispatchBackendApi;
+  }
+  return null;
+}
+
+function normalizeOrderForBackend(order) {
+  const postcode = asText(order.postcode).trim();
+  const zoneCode =
+    asText(order.zone_code).trim() ||
+    resolveZoneCodeByPostcode(postcode, appState.snapshot?.config?.zone_by_postcode || {});
+  return {
+    order_id: order.order_id,
+    dispatch_date: asText(order.dispatch_date) || todayISO(),
+    delivery_address: asText(order.delivery_address),
+    lat: toNumber(order.lat),
+    lng: toNumber(order.lng),
+    postcode: postcode || null,
+    zone_code: zoneCode || null,
+    urgency: normalizeUrgency(order.urgency),
+    window_start: normalizeTimeString(order.window_start, "08:00"),
+    window_end: normalizeTimeString(order.window_end, "10:00"),
+    designated_driver_id: parseOptionalInt(order.designated_driver_id),
+    load_type: asText(order.load_type || "MIXED").toUpperCase(),
+    kg_count: nonNegativeNumber(order.kg_count, 0),
+    pallet_count: nonNegativeInt(order.pallet_count, 0),
+    bag_count: nonNegativeInt(order.bag_count, 0),
+    metadata: isObject(order.metadata) ? deepClone(order.metadata) : {}
+  };
+}
+
+function deriveDispatchDateFromOrders(orders) {
+  for (const order of safeArray(orders)) {
+    const dispatchDate = asText(order?.dispatch_date).trim();
+    if (dispatchDate !== "") return dispatchDate;
+  }
+  return todayISO();
+}
+
+function hasDispatchResultContract(result) {
+  if (!isObject(result)) return false;
+  return (
+    Array.isArray(result.plans) &&
+    Array.isArray(result.order_assignments) &&
+    Array.isArray(result.exceptions)
+  );
+}
+
+function buildBackendFallbackWarning(error) {
+  const detail = asText(error?.payload?.detail || error?.message).trim();
+  const lowered = detail.toLowerCase();
+  if (lowered.includes("no active drivers")) {
+    return "Backend generate failed (No active drivers). Falling back to local planner.";
+  }
+  if (lowered.includes("no active vehicles")) {
+    return "Backend generate failed (No active vehicles). Falling back to local planner.";
+  }
+  if (lowered.includes("no orders in batch")) {
+    return "Backend generate failed (No orders in batch). Falling back to local planner.";
+  }
+  if (
+    lowered.includes("failed to fetch") ||
+    lowered.includes("network") ||
+    lowered.includes("backend api client is unavailable")
+  ) {
+    return "Backend API unavailable. Falling back to local planner.";
+  }
+  if (detail !== "") {
+    return `Backend generate failed (${detail}). Falling back to local planner.`;
+  }
+  return "Backend generate failed. Falling back to local planner.";
 }
 
 function handleEditInputs() {
