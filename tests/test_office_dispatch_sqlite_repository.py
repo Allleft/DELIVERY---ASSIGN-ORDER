@@ -100,6 +100,25 @@ class SQLiteDispatchRepositoryTest(unittest.TestCase):
         self.assertEqual([1], [row["driver_id"] for row in active_drivers])
         self.assertEqual([101], [row["vehicle_id"] for row in active_vehicles])
 
+    def test_replace_and_list_drivers_and_vehicles_persist(self) -> None:
+        self.repo.replace_drivers(
+            [
+                self._driver(driver_id=31, is_available=True),
+                self._driver(driver_id=32, is_available=False),
+            ]
+        )
+        self.repo.replace_vehicles(
+            [
+                self._vehicle(vehicle_id=401, is_available=True),
+                self._vehicle(vehicle_id=402, is_available=False),
+            ]
+        )
+
+        self.assertEqual([31, 32], [row["driver_id"] for row in self.repo.list_drivers()])
+        self.assertEqual([401, 402], [row["vehicle_id"] for row in self.repo.list_vehicles()])
+        self.assertEqual([31], [row["driver_id"] for row in self.repo.list_active_drivers()])
+        self.assertEqual([401], [row["vehicle_id"] for row in self.repo.list_active_vehicles()])
+
     def test_dispatch_batch_service_generates_with_sqlite_repo(self) -> None:
         service = DispatchBatchService(repository=self.repo)
         batch = service.create_dispatch_batch("2026-05-10", created_by="sqlite.user")

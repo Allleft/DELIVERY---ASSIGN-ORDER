@@ -16,6 +16,17 @@ _REQUIRED_ORDER_FIELDS = (
     "window_start",
     "window_end",
 )
+_REQUIRED_DRIVER_FIELDS = (
+    "driver_id",
+    "shift_start",
+    "shift_end",
+    "is_available",
+)
+_REQUIRED_VEHICLE_FIELDS = (
+    "vehicle_id",
+    "vehicle_type",
+    "is_available",
+)
 
 
 class _DispatchBatchServiceProtocol(Protocol):
@@ -28,6 +39,14 @@ class _DispatchBatchServiceProtocol(Protocol):
     def save_batch_orders(self, batch_id: int, orders: list[dict[str, Any]]) -> list[dict[str, Any]]: ...
 
     def list_batch_orders(self, batch_id: int) -> list[dict[str, Any]]: ...
+
+    def save_drivers(self, drivers: list[dict[str, Any]]) -> list[dict[str, Any]]: ...
+
+    def list_drivers(self) -> list[dict[str, Any]]: ...
+
+    def save_vehicles(self, vehicles: list[dict[str, Any]]) -> list[dict[str, Any]]: ...
+
+    def list_vehicles(self) -> list[dict[str, Any]]: ...
 
     def generate_dispatch_for_batch(self, batch_id: int) -> dict[str, Any]: ...
 
@@ -74,6 +93,32 @@ def list_batch_orders(batch_id: int | str, service: _DispatchBatchServiceProtoco
     if service is not None:
         return service.list_batch_orders(normalized_batch_id)
     return service_module.list_batch_orders(normalized_batch_id)
+
+
+def save_drivers(payload: list[dict[str, Any]], service: _DispatchBatchServiceProtocol | None = None) -> list[dict[str, Any]]:
+    drivers = _require_master_payload(payload, _REQUIRED_DRIVER_FIELDS, "save_drivers payload")
+    if service is not None:
+        return service.save_drivers(drivers)
+    return service_module.save_drivers(drivers)
+
+
+def list_drivers(service: _DispatchBatchServiceProtocol | None = None) -> list[dict[str, Any]]:
+    if service is not None:
+        return service.list_drivers()
+    return service_module.list_drivers()
+
+
+def save_vehicles(payload: list[dict[str, Any]], service: _DispatchBatchServiceProtocol | None = None) -> list[dict[str, Any]]:
+    vehicles = _require_master_payload(payload, _REQUIRED_VEHICLE_FIELDS, "save_vehicles payload")
+    if service is not None:
+        return service.save_vehicles(vehicles)
+    return service_module.save_vehicles(vehicles)
+
+
+def list_vehicles(service: _DispatchBatchServiceProtocol | None = None) -> list[dict[str, Any]]:
+    if service is not None:
+        return service.list_vehicles()
+    return service_module.list_vehicles()
 
 
 def generate_batch_plan(batch_id: int | str, service: _DispatchBatchServiceProtocol | None = None) -> dict[str, Any]:
@@ -123,4 +168,16 @@ def _require_orders_payload(payload: Any) -> list[dict[str, Any]]:
             raise ValueError(f"Order at index {index} must be a dict.")
         _require_fields(order, _REQUIRED_ORDER_FIELDS, f"order[{index}]")
         normalized.append(order)
+    return normalized
+
+
+def _require_master_payload(payload: Any, required_fields: tuple[str, ...], scope: str) -> list[dict[str, Any]]:
+    if not isinstance(payload, list):
+        raise ValueError(f"{scope} must be a list.")
+    normalized: list[dict[str, Any]] = []
+    for index, item in enumerate(payload):
+        if not isinstance(item, dict):
+            raise ValueError(f"Item at index {index} must be a dict.")
+        _require_fields(item, required_fields, f"{scope}[{index}]")
+        normalized.append(item)
     return normalized

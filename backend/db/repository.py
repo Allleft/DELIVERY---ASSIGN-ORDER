@@ -27,6 +27,14 @@ class DispatchRepository(Protocol):
 
     def list_batch_orders(self, batch_id: int) -> list[Record]: ...
 
+    def replace_drivers(self, drivers: list[Record]) -> None: ...
+
+    def list_drivers(self) -> list[Record]: ...
+
+    def replace_vehicles(self, vehicles: list[Record]) -> None: ...
+
+    def list_vehicles(self) -> list[Record]: ...
+
     def list_active_drivers(self) -> list[Record]: ...
 
     def list_active_vehicles(self) -> list[Record]: ...
@@ -99,6 +107,18 @@ class InMemoryDispatchRepository:
     def list_batch_orders(self, batch_id: int) -> list[Record]:
         return deepcopy(self._orders_by_batch.get(batch_id, []))
 
+    def replace_drivers(self, drivers: list[Record]) -> None:
+        self._drivers = [deepcopy(driver) for driver in drivers]
+
+    def list_drivers(self) -> list[Record]:
+        return [deepcopy(driver) for driver in self._drivers]
+
+    def replace_vehicles(self, vehicles: list[Record]) -> None:
+        self._vehicles = [deepcopy(vehicle) for vehicle in vehicles]
+
+    def list_vehicles(self) -> list[Record]:
+        return [deepcopy(vehicle) for vehicle in self._vehicles]
+
     def list_active_drivers(self) -> list[Record]:
         return [deepcopy(driver) for driver in self._drivers if driver.get("is_available", True)]
 
@@ -133,4 +153,3 @@ def _normalize_dispatch_date(value: str | date) -> str:
     if isinstance(value, date):
         return value.isoformat()
     return str(value)
-

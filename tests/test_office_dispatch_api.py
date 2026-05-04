@@ -7,7 +7,11 @@ from backend.api.dispatch import (
     generate_batch_plan,
     get_batch,
     list_batch_orders,
+    list_drivers,
+    list_vehicles,
     save_batch_orders,
+    save_drivers,
+    save_vehicles,
 )
 from backend.db.repository import InMemoryDispatchRepository
 from backend.services.dispatch_service import DispatchBatchService
@@ -79,6 +83,32 @@ class OfficeDispatchApiTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Missing batch"):
             get_batch(999, service=self.service)
 
+    def test_save_and_list_drivers(self) -> None:
+        saved = save_drivers([self._driver(driver_id=101), self._driver(driver_id=102)], service=self.service)
+        listed = list_drivers(service=self.service)
+
+        self.assertEqual(2, len(saved))
+        self.assertEqual([101, 102], [row["driver_id"] for row in listed])
+
+    def test_save_drivers_with_missing_required_field_raises_value_error(self) -> None:
+        invalid_driver = self._driver(driver_id=103)
+        invalid_driver.pop("shift_start")
+        with self.assertRaisesRegex(ValueError, "shift_start"):
+            save_drivers([invalid_driver], service=self.service)
+
+    def test_save_and_list_vehicles(self) -> None:
+        saved = save_vehicles([self._vehicle(vehicle_id=201), self._vehicle(vehicle_id=202)], service=self.service)
+        listed = list_vehicles(service=self.service)
+
+        self.assertEqual(2, len(saved))
+        self.assertEqual([201, 202], [row["vehicle_id"] for row in listed])
+
+    def test_save_vehicles_with_missing_required_field_raises_value_error(self) -> None:
+        invalid_vehicle = self._vehicle(vehicle_id=203)
+        invalid_vehicle.pop("vehicle_type")
+        with self.assertRaisesRegex(ValueError, "vehicle_type"):
+            save_vehicles([invalid_vehicle], service=self.service)
+
     @staticmethod
     def _order(order_id: int | str, urgency: str = "NORMAL") -> dict[str, object]:
         return {
@@ -138,4 +168,3 @@ class OfficeDispatchApiTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

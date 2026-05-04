@@ -72,6 +72,42 @@ def create_app(service: Any | None = None) -> FastAPI:
             )
         )
 
+    @app.get("/api/dispatch/drivers")
+    def list_drivers() -> list[dict[str, Any]]:
+        return _handle_value_error(
+            lambda: _resolve_and_call(
+                service,
+                lambda resolved_service: dispatch_api.list_drivers(service=resolved_service),
+            )
+        )
+
+    @app.post("/api/dispatch/drivers")
+    def save_drivers(payload: Any = Body(...)) -> list[dict[str, Any]]:
+        return _handle_value_error(
+            lambda: _resolve_and_call(
+                service,
+                lambda resolved_service: dispatch_api.save_drivers(payload, service=resolved_service),
+            )
+        )
+
+    @app.get("/api/dispatch/vehicles")
+    def list_vehicles() -> list[dict[str, Any]]:
+        return _handle_value_error(
+            lambda: _resolve_and_call(
+                service,
+                lambda resolved_service: dispatch_api.list_vehicles(service=resolved_service),
+            )
+        )
+
+    @app.post("/api/dispatch/vehicles")
+    def save_vehicles(payload: Any = Body(...)) -> list[dict[str, Any]]:
+        return _handle_value_error(
+            lambda: _resolve_and_call(
+                service,
+                lambda resolved_service: dispatch_api.save_vehicles(payload, service=resolved_service),
+            )
+        )
+
     @app.post("/api/dispatch/batches/{batch_id}/generate")
     def generate_batch_plan(batch_id: int) -> dict[str, Any]:
         # Response contract must remain: plans / order_assignments / exceptions.

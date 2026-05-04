@@ -102,6 +102,44 @@ class OfficeDispatchHttpTest(unittest.TestCase):
         payload = response.json()
         self.assertEqual({"plans", "order_assignments", "exceptions"}, set(payload.keys()))
 
+    def test_save_and_list_drivers(self) -> None:
+        payload = [self._driver(driver_id=71), self._driver(driver_id=72)]
+
+        save_response = self.client.post("/api/dispatch/drivers", json=payload)
+        list_response = self.client.get("/api/dispatch/drivers")
+
+        self.assertEqual(200, save_response.status_code)
+        self.assertEqual(200, list_response.status_code)
+        self.assertEqual([71, 72], [item["driver_id"] for item in list_response.json()])
+
+    def test_save_drivers_missing_required_field_returns_400(self) -> None:
+        invalid_driver = self._driver(driver_id=73)
+        invalid_driver.pop("shift_start")
+
+        response = self.client.post("/api/dispatch/drivers", json=[invalid_driver])
+
+        self.assertEqual(400, response.status_code)
+        self.assertIn("shift_start", response.json()["detail"])
+
+    def test_save_and_list_vehicles(self) -> None:
+        payload = [self._vehicle(vehicle_id=81), self._vehicle(vehicle_id=82)]
+
+        save_response = self.client.post("/api/dispatch/vehicles", json=payload)
+        list_response = self.client.get("/api/dispatch/vehicles")
+
+        self.assertEqual(200, save_response.status_code)
+        self.assertEqual(200, list_response.status_code)
+        self.assertEqual([81, 82], [item["vehicle_id"] for item in list_response.json()])
+
+    def test_save_vehicles_missing_required_field_returns_400(self) -> None:
+        invalid_vehicle = self._vehicle(vehicle_id=83)
+        invalid_vehicle.pop("vehicle_type")
+
+        response = self.client.post("/api/dispatch/vehicles", json=[invalid_vehicle])
+
+        self.assertEqual(400, response.status_code)
+        self.assertIn("vehicle_type", response.json()["detail"])
+
     @staticmethod
     def _order(order_id: int | str, urgency: str = "NORMAL") -> dict[str, Any]:
         return {

@@ -123,6 +123,48 @@ class SQLiteDispatchRepository:
         ).fetchall()
         return [_deserialize_json(row["order_json"]) for row in rows]
 
+    def replace_drivers(self, drivers: list[Record]) -> None:
+        with self._conn:
+            self._conn.execute("DELETE FROM drivers")
+            for driver in drivers:
+                item = deepcopy(driver)
+                driver_id = int(item["driver_id"])
+                is_available = 1 if bool(item.get("is_available", True)) else 0
+                self._conn.execute(
+                    """
+                    INSERT INTO drivers (driver_id, is_available, driver_json)
+                    VALUES (?, ?, ?)
+                    """,
+                    (driver_id, is_available, _serialize_json(item)),
+                )
+
+    def list_drivers(self) -> list[Record]:
+        rows = self._conn.execute(
+            "SELECT driver_json FROM drivers ORDER BY driver_id ASC"
+        ).fetchall()
+        return [_deserialize_json(row["driver_json"]) for row in rows]
+
+    def replace_vehicles(self, vehicles: list[Record]) -> None:
+        with self._conn:
+            self._conn.execute("DELETE FROM vehicles")
+            for vehicle in vehicles:
+                item = deepcopy(vehicle)
+                vehicle_id = int(item["vehicle_id"])
+                is_available = 1 if bool(item.get("is_available", True)) else 0
+                self._conn.execute(
+                    """
+                    INSERT INTO vehicles (vehicle_id, is_available, vehicle_json)
+                    VALUES (?, ?, ?)
+                    """,
+                    (vehicle_id, is_available, _serialize_json(item)),
+                )
+
+    def list_vehicles(self) -> list[Record]:
+        rows = self._conn.execute(
+            "SELECT vehicle_json FROM vehicles ORDER BY vehicle_id ASC"
+        ).fetchall()
+        return [_deserialize_json(row["vehicle_json"]) for row in rows]
+
     def list_active_drivers(self) -> list[Record]:
         rows = self._conn.execute(
             "SELECT driver_json FROM drivers WHERE is_available = 1 ORDER BY driver_id ASC"

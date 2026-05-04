@@ -33,6 +33,28 @@ class OfficeDispatchServiceTest(unittest.TestCase):
         loaded_ids = {row["order_id"] for row in loaded}
         self.assertEqual({2001, "2002A"}, loaded_ids)
 
+    def test_save_and_list_drivers_and_vehicles(self) -> None:
+        saved_drivers = self.service.save_drivers(
+            [
+                self._driver(driver_id=20, preferred_zone_codes=("LOCAL",)),
+                self._driver(driver_id=21, preferred_zone_codes=("WEST",)),
+            ]
+        )
+        saved_vehicles = self.service.save_vehicles(
+            [
+                self._vehicle(vehicle_id=220, rego="2AAA00"),
+                self._vehicle(vehicle_id=221, rego="2BBB00"),
+            ]
+        )
+
+        listed_drivers = self.service.list_drivers()
+        listed_vehicles = self.service.list_vehicles()
+
+        self.assertEqual(2, len(saved_drivers))
+        self.assertEqual(2, len(saved_vehicles))
+        self.assertEqual([20, 21], [row["driver_id"] for row in listed_drivers])
+        self.assertEqual([220, 221], [row["vehicle_id"] for row in listed_vehicles])
+
     def test_save_orders_replaces_existing_and_resets_generated_status(self) -> None:
         batch = self.service.create_dispatch_batch("2026-05-01", created_by="office.user")
         batch_id = int(batch["batch_id"])

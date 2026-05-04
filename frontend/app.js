@@ -1429,6 +1429,8 @@ async function generatePlanViaBackendApi(snapshot) {
     throw new Error("Backend API client is unavailable.");
   }
   const normalizedOrders = safeArray(snapshot.orders).map((order) => normalizeOrderForBackend(order));
+  const normalizedDrivers = safeArray(snapshot.drivers).map((driver) => normalizeDriverForBackend(driver));
+  const normalizedVehicles = safeArray(snapshot.vehicles).map((vehicle) => normalizeVehicleForBackend(vehicle));
   const dispatchDate = deriveDispatchDateFromOrders(normalizedOrders);
   const batch = await api.createBatch({
     dispatch_date: dispatchDate,
@@ -1439,6 +1441,8 @@ async function generatePlanViaBackendApi(snapshot) {
   if (isBlank(batchId)) {
     throw new Error("Backend did not return batch_id.");
   }
+  await api.saveDrivers(normalizedDrivers);
+  await api.saveVehicles(normalizedVehicles);
   await api.saveBatchOrders(batchId, normalizedOrders);
   return api.generateBatchPlan(batchId);
 }
@@ -1473,6 +1477,58 @@ function normalizeOrderForBackend(order) {
     pallet_count: nonNegativeInt(order.pallet_count, 0),
     bag_count: nonNegativeInt(order.bag_count, 0),
     metadata: isObject(order.metadata) ? deepClone(order.metadata) : {}
+  };
+}
+
+function normalizeDriverForBackend(driver) {
+  const preferredZoneCodes = Array.isArray(driver.preferred_zone_codes)
+    ? driver.preferred_zone_codes.map((code) => asText(code).trim()).filter((code) => code !== "")
+    : asText(driver.preferred_zone_codes)
+        .split(",")
+        .map((code) => code.trim())
+        .filter((code) => code !== "");
+  const metadata = isObject(driver.metadata) ? deepClone(driver.metadata) : {};
+  const displayName = asText(driver.name).trim();
+  if (displayName !== "") {
+    metadata.name = displayName;
+  }
+  return {
+    driver_id: normalizeIdentifier(driver.driver_id),
+    shift_start: normalizeTimeString(driver.shift_start, "07:00"),
+    shift_end: normalizeTimeString(driver.shift_end, "17:00"),
+    is_available: driver.is_available !== false,
+    start_location: asText(driver.start_location).trim() || "Depot",
+    end_location: asText(driver.end_location).trim() || "Depot",
+    preferred_zone_codes: preferredZoneCodes,
+    historical_vehicle_ids: Array.isArray(driver.historical_vehicle_ids)
+      ? driver.historical_vehicle_ids.map((id) => normalizeIdentifier(id)).filter((id) => id !== "")
+      : [],
+    branch_no: asText(driver.branch_no).trim() || null,
+    start_lat: toNumber(driver.start_lat),
+    start_lng: toNumber(driver.start_lng),
+    end_lat: toNumber(driver.end_lat),
+    end_lng: toNumber(driver.end_lng),
+    metadata
+  };
+}
+
+function normalizeVehicleForBackend(vehicle) {
+  const metadata = isObject(vehicle.metadata) ? deepClone(vehicle.metadata) : {};
+  const rego = asText(vehicle.rego).trim();
+  if (rego !== "") {
+    metadata.rego = rego;
+  }
+  return {
+    vehicle_id: normalizeIdentifier(vehicle.vehicle_id),
+    vehicle_type: asText(vehicle.vehicle_type).trim() || "van",
+    is_available: vehicle.is_available !== false,
+    kg_capacity: nonNegativeNumber(vehicle.kg_capacity, 0),
+    pallet_capacity: nonNegativeInt(vehicle.pallet_capacity, 0),
+    tub_capacity: nonNegativeInt(vehicle.tub_capacity, 0),
+    trolley_capacity: nonNegativeInt(vehicle.trolley_capacity, 0),
+    stillage_capacity: nonNegativeInt(vehicle.stillage_capacity, 0),
+    loose_capacity: parseOptionalInt(vehicle.loose_capacity),
+    metadata
   };
 }
 

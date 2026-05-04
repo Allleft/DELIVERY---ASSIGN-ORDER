@@ -24,6 +24,22 @@
     return requestJson("POST", `/api/dispatch/batches/${encodeURIComponent(asText(batchId).trim())}/orders`, orders);
   }
 
+  async function saveDrivers(drivers) {
+    return requestJson("POST", "/api/dispatch/drivers", drivers);
+  }
+
+  async function listDrivers() {
+    return requestJson("GET", "/api/dispatch/drivers");
+  }
+
+  async function saveVehicles(vehicles) {
+    return requestJson("POST", "/api/dispatch/vehicles", vehicles);
+  }
+
+  async function listVehicles() {
+    return requestJson("GET", "/api/dispatch/vehicles");
+  }
+
   async function listBatchOrders(batchId) {
     return requestJson("GET", `/api/dispatch/batches/${encodeURIComponent(asText(batchId).trim())}/orders`);
   }
@@ -81,6 +97,10 @@
     createBatch,
     getBatch,
     saveBatchOrders,
+    saveDrivers,
+    listDrivers,
+    saveVehicles,
+    listVehicles,
     listBatchOrders,
     generateBatchPlan
   });

@@ -46,6 +46,20 @@ class DispatchBatchService:
         self._require_batch(batch_id)
         return self.repository.list_batch_orders(batch_id)
 
+    def save_drivers(self, drivers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        self.repository.replace_drivers(drivers)
+        return self.repository.list_drivers()
+
+    def list_drivers(self) -> list[dict[str, Any]]:
+        return self.repository.list_drivers()
+
+    def save_vehicles(self, vehicles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        self.repository.replace_vehicles(vehicles)
+        return self.repository.list_vehicles()
+
+    def list_vehicles(self) -> list[dict[str, Any]]:
+        return self.repository.list_vehicles()
+
     def generate_dispatch_for_batch(self, batch_id: int) -> dict[str, Any]:
         batch = self._require_batch(batch_id)
         raw_orders = self.repository.list_batch_orders(batch_id)
@@ -122,6 +136,22 @@ def save_batch_orders(batch_id: int, orders: list[dict[str, Any]]) -> list[dict[
 
 def list_batch_orders(batch_id: int) -> list[dict[str, Any]]:
     return _default_service.list_batch_orders(batch_id=batch_id)
+
+
+def save_drivers(drivers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return _default_service.save_drivers(drivers=drivers)
+
+
+def list_drivers() -> list[dict[str, Any]]:
+    return _default_service.list_drivers()
+
+
+def save_vehicles(vehicles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return _default_service.save_vehicles(vehicles=vehicles)
+
+
+def list_vehicles() -> list[dict[str, Any]]:
+    return _default_service.list_vehicles()
 
 
 def generate_dispatch_for_batch(batch_id: int) -> dict[str, Any]:
