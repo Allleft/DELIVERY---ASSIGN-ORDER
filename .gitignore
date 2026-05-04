@@ -46,3 +46,12 @@ Thumbs.db
 cache/
 coverage/
 htmlcov/
+
+# Local dispatch runtime data
+*.sqlite
+*.sqlite3
+*.db
+data/*.sqlite
+data/*.sqlite3
+data/*.db
+data/static-geocoder.json
