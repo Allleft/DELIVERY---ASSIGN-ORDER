@@ -185,6 +185,69 @@ class OfficeDispatchHttpTest(unittest.TestCase):
             payload = generated.json()
             self.assertEqual({"plans", "order_assignments", "exceptions"}, set(payload.keys()))
 
+    def test_patch_manual_assignment_returns_updated_result(self) -> None:
+        self.repo.seed_driver(self._driver(driver_id=111))
+        self.repo.seed_driver(self._driver(driver_id=112))
+        self.repo.seed_vehicle(self._vehicle(vehicle_id=211))
+        self.repo.seed_vehicle(self._vehicle(vehicle_id=212))
+        created = self.client.post(
+            "/api/dispatch/batches",
+            json={"dispatch_date": "2026-05-03", "created_by": "http.user"},
+        ).json()
+        batch_id = int(created["batch_id"])
+        self.client.post(
+            f"/api/dispatch/batches/{batch_id}/orders",
+            json=[self._order(order_id=9601), self._order(order_id=9602)],
+        )
+        generated = self.client.post(f"/api/dispatch/batches/{batch_id}/generate")
+        self.assertEqual(200, generated.status_code)
+
+        patch_response = self.client.patch(
+            f"/api/dispatch/batches/{batch_id}/assignments/9601/manual",
+            json={"driver_id": 112, "vehicle_id": 212, "manual_reason": ""},
+        )
+
+        self.assertEqual(200, patch_response.status_code)
+        payload = patch_response.json()
+        self.assertEqual({"plans", "order_assignments", "exceptions"}, set(payload.keys()))
+        assignment = next(row for row in payload["order_assignments"] if str(row["order_id"]) == "9601")
+        self.assertEqual("MANUALLY_ASSIGNED", assignment["status"])
+        self.assertEqual("MANUAL", assignment["assignment_source"])
+        self.assertIsNone(assignment["manual_reason"])
+        self.assertTrue(str(assignment["plan_id"]).strip())
+
+        fetched = self.client.get(f"/api/dispatch/batches/{batch_id}/result")
+        self.assertEqual(200, fetched.status_code)
+        fetched_payload = fetched.json()
+        fetched_assignment = next(row for row in fetched_payload["order_assignments"] if str(row["order_id"]) == "9601")
+        self.assertEqual("MANUALLY_ASSIGNED", fetched_assignment["status"])
+
+    def test_patch_manual_assignment_missing_batch_returns_404(self) -> None:
+        response = self.client.patch(
+            "/api/dispatch/batches/999/assignments/1001/manual",
+            json={"driver_id": 1, "vehicle_id": 101},
+        )
+        self.assertEqual(404, response.status_code)
+        self.assertIn("Missing batch", response.json()["detail"])
+
+    def test_patch_manual_assignment_locked_batch_returns_400(self) -> None:
+        self.repo.seed_driver(self._driver(driver_id=121))
+        self.repo.seed_vehicle(self._vehicle(vehicle_id=221))
+        created = self.client.post(
+            "/api/dispatch/batches",
+            json={"dispatch_date": "2026-05-03", "created_by": "http.user"},
+        ).json()
+        batch_id = int(created["batch_id"])
+        self.client.post(f"/api/dispatch/batches/{batch_id}/orders", json=[self._order(order_id=9701)])
+        self.repo.update_batch(batch_id, status="LOCKED")
+
+        response = self.client.patch(
+            f"/api/dispatch/batches/{batch_id}/assignments/9701/manual",
+            json={"driver_id": 121, "vehicle_id": 221},
+        )
+        self.assertEqual(400, response.status_code)
+        self.assertIn("locked", response.json()["detail"].lower())
+
     @staticmethod
     def _order(order_id: int | str, urgency: str = "NORMAL", with_coordinates: bool = True) -> dict[str, Any]:
         lat = -37.8136 if with_coordinates else None

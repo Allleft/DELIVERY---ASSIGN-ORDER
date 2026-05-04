@@ -13,6 +13,7 @@ from backend.api.dispatch import (
     save_batch_orders,
     save_drivers,
     save_vehicles,
+    update_manual_assignment,
 )
 from backend.db.repository import InMemoryDispatchRepository
 from backend.services.dispatch_service import DispatchBatchService
@@ -121,6 +122,38 @@ class OfficeDispatchApiTest(unittest.TestCase):
         invalid_vehicle.pop("vehicle_type")
         with self.assertRaisesRegex(ValueError, "vehicle_type"):
             save_vehicles([invalid_vehicle], service=self.service)
+
+    def test_update_manual_assignment_requires_driver_and_vehicle(self) -> None:
+        batch = create_batch({"dispatch_date": "2026-05-02", "created_by": "api.user"}, service=self.service)
+        batch_id = int(batch["batch_id"])
+        save_batch_orders(batch_id, [self._order(order_id=9201)], service=self.service)
+        save_drivers([self._driver(driver_id=301)], service=self.service)
+        save_vehicles([self._vehicle(vehicle_id=401)], service=self.service)
+
+        with self.assertRaisesRegex(ValueError, "driver_id"):
+            update_manual_assignment(batch_id, 9201, {"vehicle_id": 401}, service=self.service)
+        with self.assertRaisesRegex(ValueError, "vehicle_id"):
+            update_manual_assignment(batch_id, 9201, {"driver_id": 301}, service=self.service)
+
+    def test_update_manual_assignment_succeeds_without_manual_reason(self) -> None:
+        batch = create_batch({"dispatch_date": "2026-05-02", "created_by": "api.user"}, service=self.service)
+        batch_id = int(batch["batch_id"])
+        save_batch_orders(batch_id, [self._order(order_id=9301)], service=self.service)
+        save_drivers([self._driver(driver_id=302)], service=self.service)
+        save_vehicles([self._vehicle(vehicle_id=402)], service=self.service)
+
+        result = update_manual_assignment(
+            batch_id,
+            9301,
+            {"driver_id": 302, "vehicle_id": 402, "manual_reason": ""},
+            service=self.service,
+        )
+
+        self.assertEqual({"plans", "order_assignments", "exceptions"}, set(result.keys()))
+        assignment = next(row for row in result["order_assignments"] if row["order_id"] == 9301)
+        self.assertEqual("MANUALLY_ASSIGNED", assignment["status"])
+        self.assertEqual("MANUAL", assignment["assignment_source"])
+        self.assertIsNone(assignment["manual_reason"])
 
     @staticmethod
     def _order(order_id: int | str, urgency: str = "NORMAL") -> dict[str, object]:

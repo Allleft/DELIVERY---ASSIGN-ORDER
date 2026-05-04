@@ -127,6 +127,20 @@ def create_app(service: Any | None = None) -> FastAPI:
             )
         )
 
+    @app.patch("/api/dispatch/batches/{batch_id}/assignments/{order_id}/manual")
+    def update_manual_assignment(batch_id: int, order_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        return _handle_value_error(
+            lambda: _resolve_and_call(
+                service,
+                lambda resolved_service: dispatch_api.update_manual_assignment(
+                    batch_id=batch_id,
+                    order_id=order_id,
+                    payload=payload,
+                    service=resolved_service,
+                ),
+            )
+        )
+
     return app
 
 

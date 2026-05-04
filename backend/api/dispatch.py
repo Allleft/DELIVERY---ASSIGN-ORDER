@@ -52,6 +52,15 @@ class _DispatchBatchServiceProtocol(Protocol):
 
     def generate_dispatch_for_batch(self, batch_id: int) -> dict[str, Any]: ...
 
+    def update_manual_assignment(
+        self,
+        batch_id: int,
+        order_id: int | str,
+        driver_id: int | str,
+        vehicle_id: int | str,
+        manual_reason: str | None = None,
+    ) -> dict[str, Any]: ...
+
 
 def list_batches(service: _DispatchBatchServiceProtocol | None = None) -> list[dict[str, Any]]:
     if service is not None:
@@ -142,9 +151,35 @@ def lock_batch(batch_id: int | str, service: _DispatchBatchServiceProtocol | Non
     raise NotImplementedError("Planned for a later phase: lock batch API.")
 
 
-def update_manual_assignment(assignment_id: int | str, payload: dict[str, Any], service: _DispatchBatchServiceProtocol | None = None) -> Any:
-    _ = (assignment_id, payload, service)
-    raise NotImplementedError("Planned for a later phase: manual assignment API.")
+def update_manual_assignment(
+    batch_id: int | str,
+    order_id: int | str,
+    payload: dict[str, Any],
+    service: _DispatchBatchServiceProtocol | None = None,
+) -> dict[str, Any]:
+    normalized_batch_id = _normalize_batch_id(batch_id)
+    normalized_order_id = _normalize_order_id(order_id)
+    payload_obj = _require_dict_payload(payload, "update_manual_assignment payload must be a dict.")
+    _require_fields(payload_obj, ("driver_id", "vehicle_id"), "update_manual_assignment payload")
+    driver_id = payload_obj["driver_id"]
+    vehicle_id = payload_obj["vehicle_id"]
+    manual_reason = payload_obj.get("manual_reason")
+
+    if service is not None:
+        return service.update_manual_assignment(
+            normalized_batch_id,
+            normalized_order_id,
+            driver_id,
+            vehicle_id,
+            manual_reason=manual_reason,
+        )
+    return service_module.update_manual_assignment(
+        batch_id=normalized_batch_id,
+        order_id=normalized_order_id,
+        driver_id=driver_id,
+        vehicle_id=vehicle_id,
+        manual_reason=manual_reason,
+    )
 
 
 def _normalize_batch_id(batch_id: int | str) -> int:
@@ -154,6 +189,17 @@ def _normalize_batch_id(batch_id: int | str) -> int:
         return int(batch_id)
     except (TypeError, ValueError) as exc:
         raise ValueError("batch_id must be an integer.") from exc
+
+
+def _normalize_order_id(order_id: int | str) -> int | str:
+    if isinstance(order_id, bool):
+        raise ValueError("order_id must be a non-empty string or integer.")
+    if isinstance(order_id, int):
+        return order_id
+    text = str(order_id).strip()
+    if text == "":
+        raise ValueError("order_id must be a non-empty string or integer.")
+    return text
 
 
 def _require_dict_payload(payload: Any, message: str) -> dict[str, Any]:

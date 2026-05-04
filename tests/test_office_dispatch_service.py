@@ -187,6 +187,115 @@ class OfficeDispatchServiceTest(unittest.TestCase):
         self.assertEqual({"plans", "order_assignments", "exceptions"}, set(payload.keys()))
         self.assertGreaterEqual(len(payload["exceptions"]), 1)
 
+    def test_update_manual_assignment_succeeds_without_manual_reason(self) -> None:
+        batch = self.service.create_dispatch_batch("2026-05-08", created_by="office.user")
+        batch_id = int(batch["batch_id"])
+        self._seed_minimum_resources()
+        self.service.save_batch_orders(batch_id, [self._order(order_id=7001), self._order(order_id=7002)])
+        generated = self.service.generate_dispatch_for_batch(batch_id)
+        target_assignment = generated["order_assignments"][0]
+
+        updated = self.service.update_manual_assignment(
+            batch_id=batch_id,
+            order_id=target_assignment["order_id"],
+            driver_id=2,
+            vehicle_id=102,
+            manual_reason="",
+        )
+
+        manual = next(row for row in updated["order_assignments"] if row["order_id"] == target_assignment["order_id"])
+        self.assertEqual("MANUALLY_ASSIGNED", manual["status"])
+        self.assertEqual("MANUAL", manual["assignment_source"])
+        self.assertIsNone(manual["manual_reason"])
+        self.assertEqual(2, manual["driver_id"])
+        self.assertEqual(102, manual["vehicle_id"])
+        self.assertTrue(str(manual["plan_id"]).strip())
+        self.assertEqual("ADJUSTED", self.service.get_dispatch_batch(batch_id)["status"])
+        self.assertEqual({"plans", "order_assignments", "exceptions"}, set(updated.keys()))
+
+    def test_update_manual_assignment_succeeds_with_optional_manual_reason(self) -> None:
+        batch = self.service.create_dispatch_batch("2026-05-09", created_by="office.user")
+        batch_id = int(batch["batch_id"])
+        self._seed_minimum_resources()
+        self.service.save_batch_orders(batch_id, [self._order(order_id=7101), self._order(order_id=7102)])
+        generated = self.service.generate_dispatch_for_batch(batch_id)
+        target_assignment = generated["order_assignments"][0]
+
+        updated = self.service.update_manual_assignment(
+            batch_id=batch_id,
+            order_id=target_assignment["order_id"],
+            driver_id=2,
+            vehicle_id=102,
+            manual_reason="Customer requested this driver",
+        )
+
+        manual = next(row for row in updated["order_assignments"] if row["order_id"] == target_assignment["order_id"])
+        self.assertEqual("Customer requested this driver", manual["manual_reason"])
+        self.assertEqual("MANUALLY_ASSIGNED", manual["status"])
+        self.assertEqual("MANUAL", manual["assignment_source"])
+
+    def test_update_manual_assignment_creates_assignment_for_previously_unassigned_order(self) -> None:
+        batch = self.service.create_dispatch_batch("2026-05-10", created_by="office.user")
+        batch_id = int(batch["batch_id"])
+        self.service.save_drivers([self._driver(driver_id=81)])
+        self.service.save_vehicles([self._vehicle(vehicle_id=181)])
+        self.service.save_batch_orders(batch_id, [self._order(order_id=7201)])
+        self.repo.save_generated_results(
+            batch_id,
+            {
+                "plans": [],
+                "order_assignments": [],
+                "exceptions": [
+                    {
+                        "scope": "GROUP",
+                        "entity_id": "orders:7201",
+                        "reason_code": "RUN_UNASSIGNED",
+                        "reason_text": "Unassigned",
+                        "suggested_action": "Review",
+                    }
+                ],
+            },
+        )
+
+        updated = self.service.update_manual_assignment(
+            batch_id=batch_id,
+            order_id=7201,
+            driver_id=81,
+            vehicle_id=181,
+            manual_reason=None,
+        )
+
+        self.assertEqual(1, len(updated["order_assignments"]))
+        manual = updated["order_assignments"][0]
+        self.assertEqual("MANUALLY_ASSIGNED", manual["status"])
+        self.assertTrue(str(manual["plan_id"]).strip())
+        self.assertEqual([], [exc for exc in updated["exceptions"] if exc.get("reason_code") == "RUN_UNASSIGNED"])
+        self.assertEqual(1, len(updated["plans"]))
+        self.assertEqual(manual["plan_id"], updated["plans"][0]["plan_id"])
+
+    def test_update_manual_assignment_rejects_missing_driver_or_vehicle(self) -> None:
+        batch = self.service.create_dispatch_batch("2026-05-11", created_by="office.user")
+        batch_id = int(batch["batch_id"])
+        self.service.save_drivers([self._driver(driver_id=91)])
+        self.service.save_vehicles([self._vehicle(vehicle_id=191)])
+        self.service.save_batch_orders(batch_id, [self._order(order_id=7301)])
+
+        with self.assertRaisesRegex(ValueError, "Missing driver"):
+            self.service.update_manual_assignment(batch_id=batch_id, order_id=7301, driver_id=999, vehicle_id=191)
+        with self.assertRaisesRegex(ValueError, "Missing vehicle"):
+            self.service.update_manual_assignment(batch_id=batch_id, order_id=7301, driver_id=91, vehicle_id=999)
+
+    def test_update_manual_assignment_rejects_locked_batch(self) -> None:
+        batch = self.service.create_dispatch_batch("2026-05-12", created_by="office.user")
+        batch_id = int(batch["batch_id"])
+        self.service.save_drivers([self._driver(driver_id=101)])
+        self.service.save_vehicles([self._vehicle(vehicle_id=201)])
+        self.service.save_batch_orders(batch_id, [self._order(order_id=7401)])
+        self.repo.update_batch(batch_id, status="LOCKED")
+
+        with self.assertRaisesRegex(ValueError, "Batch is locked"):
+            self.service.update_manual_assignment(batch_id=batch_id, order_id=7401, driver_id=101, vehicle_id=201)
+
     def _seed_minimum_resources(self) -> None:
         self.repo.seed_driver(self._driver(driver_id=1))
         self.repo.seed_driver(self._driver(driver_id=2, preferred_zone_codes=("WEST",)))
