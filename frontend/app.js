@@ -103,6 +103,13 @@ const appState = {
   view: null,
   validation: createEmptyValidation(),
   result: deepClone(EMPTY_RESULT),
+  currentBackendBatchId: null,
+  manualReassign: {
+    orderId: "",
+    driverId: "",
+    vehicleId: "",
+    saving: false
+  },
   uiMode: "input",
   isResultStale: false,
   lastGeneratedAt: null,
@@ -118,6 +125,8 @@ function bootstrap() {
   bindEvents();
   applySnapshotToState(createInitialSnapshot());
   appState.result = deepClone(EMPTY_RESULT);
+  appState.currentBackendBatchId = null;
+  resetManualReassignState();
   appState.uiMode = "input";
   appState.isResultStale = false;
   appState.lastGeneratedAt = null;
@@ -211,7 +220,36 @@ function bindEvents() {
       const clearButton = event.target.closest("button[data-action='clear-filters']");
       if (clearButton) {
         clearReviewFilters();
+        return;
       }
+
+      const openManualReassignButton = event.target.closest("button[data-action='open-manual-reassign']");
+      if (openManualReassignButton) {
+        beginManualReassignForOrder(
+          openManualReassignButton.dataset.orderId,
+          openManualReassignButton.dataset.driverId,
+          openManualReassignButton.dataset.vehicleId
+        );
+        return;
+      }
+
+      const cancelManualReassignButton = event.target.closest("button[data-action='cancel-manual-reassign']");
+      if (cancelManualReassignButton) {
+        cancelManualReassign();
+        return;
+      }
+
+      const saveManualReassignButton = event.target.closest("button[data-action='save-manual-reassign']");
+      if (saveManualReassignButton) {
+        const orderId = saveManualReassignButton.dataset.orderId;
+        void saveManualAssignment(orderId, appState.manualReassign.driverId, appState.manualReassign.vehicleId);
+      }
+    });
+
+    assignmentsContainer.addEventListener("change", (event) => {
+      const field = event.target?.dataset?.manualField;
+      if (field !== "driver" && field !== "vehicle") return;
+      updateManualReassignDraft(field, event.target.value);
     });
   }
 
@@ -916,6 +954,8 @@ function applySnapshotToState(rawSnapshot) {
 function loadSampleData() {
   applySnapshotToState(createSampleSnapshot());
   appState.result = deepClone(EMPTY_RESULT);
+  appState.currentBackendBatchId = null;
+  resetManualReassignState();
   appState.uiMode = "input";
   appState.isResultStale = false;
   appState.lastGeneratedAt = null;
@@ -976,6 +1016,8 @@ async function handleLoadSelectedBatch() {
 
     applySnapshotToState(restoredSnapshot);
     appState.result = normalizedResult;
+    appState.currentBackendBatchId = normalizeIdentifier(batchId);
+    resetManualReassignState();
     appState.lastGeneratedAt = isBlank(batch?.generated_at) ? null : asText(batch.generated_at);
     appState.isResultStale = false;
     appState.reviewSearchQuery = "";
@@ -1501,16 +1543,19 @@ async function handleRunPlanner() {
   let usedBackendResult = false;
   let backendWarning = "";
   try {
-    const backendResult = await generatePlanViaBackendApi(appState.snapshot);
-    if (!hasDispatchResultContract(backendResult)) {
+    const backendPayload = await generatePlanViaBackendApi(appState.snapshot);
+    if (!hasDispatchResultContract(backendPayload.result)) {
       throw new Error("Backend response did not match result contract.");
     }
-    appState.result = normalizeResultPayload(backendResult);
+    appState.result = normalizeResultPayload(backendPayload.result);
+    appState.currentBackendBatchId = backendPayload.batchId;
     usedBackendResult = true;
   } catch (error) {
     backendWarning = buildBackendFallbackWarning(error);
+    appState.currentBackendBatchId = null;
     appState.result = planDispatch(appState.snapshot);
   }
+  resetManualReassignState();
   appState.uiMode = "review";
   appState.isResultStale = false;
   appState.lastGeneratedAt = new Date().toISOString();
@@ -1552,7 +1597,11 @@ async function generatePlanViaBackendApi(snapshot) {
   await api.saveDrivers(normalizedDrivers);
   await api.saveVehicles(normalizedVehicles);
   await api.saveBatchOrders(batchId, normalizedOrders);
-  return api.generateBatchPlan(batchId);
+  const result = await api.generateBatchPlan(batchId);
+  return {
+    batchId: normalizeIdentifier(batchId),
+    result
+  };
 }
 
 function getBackendApiClient() {
@@ -1680,6 +1729,101 @@ function buildBackendFallbackWarning(error) {
     return `Backend generate failed (${detail}). Falling back to local planner.`;
   }
   return "Backend generate failed. Falling back to local planner.";
+}
+
+function resetManualReassignState() {
+  appState.manualReassign = {
+    orderId: "",
+    driverId: "",
+    vehicleId: "",
+    saving: false
+  };
+}
+
+function hasBackendBatchForManualReassign() {
+  return !isBlank(appState.currentBackendBatchId);
+}
+
+function isManualReassignOpenForOrder(orderId) {
+  return asText(appState.manualReassign?.orderId).trim() !== "" &&
+    asText(appState.manualReassign?.orderId).trim() === asText(orderId).trim();
+}
+
+function beginManualReassignForOrder(orderId, driverId, vehicleId) {
+  const normalizedOrderId = asText(orderId).trim();
+  if (normalizedOrderId === "") return;
+  const drivers = getAvailableDriversForManualReassign();
+  const vehicles = getAvailableVehiclesForManualReassign();
+  const currentDriverId = asText(driverId).trim();
+  const currentVehicleId = asText(vehicleId).trim();
+  const selectedDriverId = drivers.some((item) => item.value === currentDriverId) ? currentDriverId : asText(drivers[0]?.value).trim();
+  const selectedVehicleId = vehicles.some((item) => item.value === currentVehicleId) ? currentVehicleId : asText(vehicles[0]?.value).trim();
+  appState.manualReassign = {
+    orderId: normalizedOrderId,
+    driverId: selectedDriverId,
+    vehicleId: selectedVehicleId,
+    saving: false
+  };
+  renderReviewDashboard(appState.result);
+}
+
+function cancelManualReassign() {
+  resetManualReassignState();
+  renderReviewDashboard(appState.result);
+}
+
+function updateManualReassignDraft(field, value) {
+  if (!appState.manualReassign || isBlank(appState.manualReassign.orderId)) return;
+  if (field !== "driver" && field !== "vehicle") return;
+  if (field === "driver") {
+    appState.manualReassign.driverId = asText(value).trim();
+    return;
+  }
+  appState.manualReassign.vehicleId = asText(value).trim();
+}
+
+async function saveManualAssignment(orderId, driverId, vehicleId) {
+  const normalizedOrderId = asText(orderId).trim();
+  if (normalizedOrderId === "") return false;
+  if (!hasBackendBatchForManualReassign()) {
+    banner("Manual reassignment requires a backend batch. Generate from backend before reassigning.", "error");
+    return false;
+  }
+  const normalizedDriverId = asText(driverId).trim();
+  const normalizedVehicleId = asText(vehicleId).trim();
+  if (normalizedDriverId === "" || normalizedVehicleId === "") {
+    banner("Select both driver and vehicle before saving manual reassignment.", "error");
+    return false;
+  }
+  const api = getBackendApiClient();
+  if (!api || typeof api.updateManualAssignment !== "function") {
+    banner("Backend manual reassignment API is unavailable.", "error");
+    return false;
+  }
+  appState.manualReassign.saving = true;
+  renderReviewDriverCards(appState.result);
+  try {
+    const updated = await api.updateManualAssignment(appState.currentBackendBatchId, normalizeIdentifier(normalizedOrderId), {
+      driver_id: normalizeIdentifier(normalizedDriverId),
+      vehicle_id: normalizeIdentifier(normalizedVehicleId)
+    });
+    if (!hasDispatchResultContract(updated)) {
+      throw new Error("Manual reassignment response did not match result contract.");
+    }
+    appState.result = normalizeResultPayload(updated);
+    resetManualReassignState();
+    appState.uiMode = "review";
+    applyUiMode();
+    renderReviewDashboard(appState.result);
+    banner(`Order ${normalizedOrderId} was manually reassigned.`, "success");
+    return true;
+  } catch (error) {
+    appState.manualReassign.saving = false;
+    renderReviewDriverCards(appState.result);
+    const detail = asText(error?.payload?.detail || error?.message).trim();
+    banner(detail ? `Manual reassignment failed (${detail}). Current result kept unchanged.` : "Manual reassignment failed. Current result kept unchanged.", "error");
+    return false;
+  }
 }
 
 function handleEditInputs() {
@@ -2632,6 +2776,46 @@ function formatOrderWindowText(order, plan) {
   return "-";
 }
 
+function getAvailableDriversForManualReassign() {
+  return safeArray(appState.view?.drivers)
+    .filter((driver) => driver?.is_available !== false)
+    .map((driver) => {
+      const id = asText(driver?.driver_id).trim();
+      if (id === "") return null;
+      const metadataName = asText(driver?._extra?.metadata?.name).trim();
+      const name = asText(driver?.name).trim() || metadataName || id;
+      return {
+        value: id,
+        label: `${name} (ID ${id})`
+      };
+    })
+    .filter((item) => item !== null)
+    .sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: "base", numeric: true }));
+}
+
+function getAvailableVehiclesForManualReassign() {
+  return safeArray(appState.view?.vehicles)
+    .filter((vehicle) => vehicle?.is_available !== false)
+    .map((vehicle) => {
+      const id = asText(vehicle?.vehicle_id).trim();
+      if (id === "") return null;
+      const metadataRego = asText(vehicle?._extra?.metadata?.rego).trim() || asText(vehicle?._metadataExtra?.rego).trim();
+      const rego = asText(vehicle?.rego).trim() || metadataRego || id;
+      return {
+        value: id,
+        label: `${rego} (ID ${id})`
+      };
+    })
+    .filter((item) => item !== null)
+    .sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: "base", numeric: true }));
+}
+
+function isManualAssignmentRecord(item) {
+  const source = asText(item?.assignment_source).trim().toUpperCase();
+  const status = asText(item?.status).trim().toUpperCase();
+  return source === "MANUAL" || status === "MANUALLY_ASSIGNED";
+}
+
 function renderAssignments(assignments, plans, reviewModel = null) {
   const node = get("orderAssignmentsContainer");
   if (!node) return;
@@ -2669,6 +2853,9 @@ function renderAssignments(assignments, plans, reviewModel = null) {
 
   const orderDetails = buildOrderDetailMap(plans);
   const summaries = buildDriverAssignmentSummary(assignments, plans);
+  const canManualReassign = hasBackendBatchForManualReassign();
+  const driverOptions = getAvailableDriversForManualReassign();
+  const vehicleOptions = getAvailableVehiclesForManualReassign();
   node.className = "driver-dashboard-list";
   node.innerHTML = summaries
     .map((driverSummary) => {
@@ -2699,13 +2886,50 @@ function renderAssignments(assignments, plans, reviewModel = null) {
               const urgencyText = normalizeUrgency(orderDetail.urgency || item.urgency || "NORMAL");
               const loadText = asText(orderDetail.load_text).trim() || "-";
               const windowText = asText(orderDetail.window_text).trim() || "-";
+              const manualBadge = isManualAssignmentRecord(item) ? "Manual" : "Auto";
               const reasonId = `assignment-reason-${escapeSelectorId(driverSummary.driver_id)}-${escapeSelectorId(vehicleSummary.vehicle_id)}-${escapeSelectorId(orderId)}-${orderIndex}`;
+              const editorOpen = isManualReassignOpenForOrder(orderId);
+              const selectedDriverId = asText(appState.manualReassign?.driverId).trim();
+              const selectedVehicleId = asText(appState.manualReassign?.vehicleId).trim();
+              const driverSelectOptions = driverOptions
+                .map((option) => `<option value="${escapeHtml(option.value)}"${option.value === selectedDriverId ? " selected" : ""}>${escapeHtml(option.label)}</option>`)
+                .join("");
+              const vehicleSelectOptions = vehicleOptions
+                .map((option) => `<option value="${escapeHtml(option.value)}"${option.value === selectedVehicleId ? " selected" : ""}>${escapeHtml(option.label)}</option>`)
+                .join("");
+              const manualEditorHtml = editorOpen
+                ? `
+                  <div class="manual-reassign-editor">
+                    <label>
+                      Driver
+                      <select data-manual-field="driver"${driverOptions.length === 0 || appState.manualReassign.saving ? " disabled" : ""}>
+                        ${driverSelectOptions}
+                      </select>
+                    </label>
+                    <label>
+                      Vehicle
+                      <select data-manual-field="vehicle"${vehicleOptions.length === 0 || appState.manualReassign.saving ? " disabled" : ""}>
+                        ${vehicleSelectOptions}
+                      </select>
+                    </label>
+                    <div class="manual-reassign-actions">
+                      <button class="button button-mini button-primary" data-action="save-manual-reassign" data-order-id="${escapeHtml(orderId)}"${driverOptions.length === 0 || vehicleOptions.length === 0 || appState.manualReassign.saving ? " disabled" : ""}>
+                        ${appState.manualReassign.saving ? "Saving..." : "Save"}
+                      </button>
+                      <button class="button button-mini button-ghost" data-action="cancel-manual-reassign"${appState.manualReassign.saving ? " disabled" : ""}>Cancel</button>
+                    </div>
+                  </div>
+                `
+                : "";
               return `
                 <article class="order-compact-row">
                   <div class="order-row-main">
                     <div class="order-row-head">
                       <strong>Order ${escapeHtml(asText(item.order_id))}</strong>
-                      <span class="pill">${escapeHtml(urgencyText)}</span>
+                      <div class="order-row-head-badges">
+                        <span class="pill">${escapeHtml(urgencyText)}</span>
+                        <span class="pill assignment-mode-badge ${manualBadge === "Manual" ? "is-manual" : "is-auto"}">${escapeHtml(manualBadge)}</span>
+                      </div>
                     </div>
                     <p class="order-row-address">${escapeHtml(orderAddress)}</p>
                     <div class="order-row-meta">
@@ -2716,8 +2940,13 @@ function renderAssignments(assignments, plans, reviewModel = null) {
                     </div>
                   </div>
                   <div class="order-row-actions">
+                    <button class="button button-mini button-secondary" data-action="open-manual-reassign" data-order-id="${escapeHtml(orderId)}" data-driver-id="${escapeHtml(asText(item.driver_id))}" data-vehicle-id="${escapeHtml(asText(item.vehicle_id))}"${!canManualReassign || appState.manualReassign.saving ? " disabled" : ""}>
+                      Reassign
+                    </button>
                     <button class="button button-mini button-ghost" data-action="toggle-reason" data-target="#${reasonId}">View Reason</button>
                   </div>
+                  ${manualEditorHtml}
+                  ${!canManualReassign ? '<p class="manual-reassign-hint">Reassign is available after backend-generated or backend-loaded batches.</p>' : ""}
                   <p id="${reasonId}" class="reason-detail" data-open="false">${escapeHtml(toBusinessExplanation(item.explanation) || "-")}</p>
                 </article>
               `;

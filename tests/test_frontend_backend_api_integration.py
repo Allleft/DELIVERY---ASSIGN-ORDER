@@ -70,6 +70,7 @@ process.stdout.write(JSON.stringify({
   has_listVehicles: typeof api.listVehicles === 'function',
   has_getBatchResult: typeof api.getBatchResult === 'function',
   has_generateBatchPlan: typeof api.generateBatchPlan === 'function',
+  has_updateManualAssignment: typeof api.updateManualAssignment === 'function',
   has_getBatch: typeof api.getBatch === 'function',
   has_listBatches: typeof api.listBatches === 'function',
   has_listBatchOrders: typeof api.listBatchOrders === 'function',
@@ -85,6 +86,7 @@ process.stdout.write(JSON.stringify({
         self.assertTrue(result["has_listVehicles"])
         self.assertTrue(result["has_getBatchResult"])
         self.assertTrue(result["has_generateBatchPlan"])
+        self.assertTrue(result["has_updateManualAssignment"])
         self.assertTrue(result["has_getBatch"])
         self.assertTrue(result["has_listBatches"])
         self.assertTrue(result["has_listBatchOrders"])
@@ -239,6 +241,115 @@ process.stdout.write(JSON.stringify({
         self.assertTrue(result["message_mentions_fallback"])
         self.assertEqual("info", result["banner_tone"])
         self.assertEqual(["exceptions", "order_assignments", "plans"], result["result_keys"])
+
+    def test_manual_reassign_success_uses_backend_batch_and_replaces_result(self) -> None:
+        result = _run_frontend_probe(
+            """
+(async () => {
+  const calls = [];
+  let renderedResult = null;
+  let bannerMessage = '';
+  context.bootstrap();
+  context.applySnapshotToState(context.createSampleSnapshot());
+  context.validateViewModel = () => ({ errors: [], warnings: [], rowErrors: { orders: new Set(), drivers: new Set(), vehicles: new Set() } });
+  context.renderValidationPanel = () => {};
+  context.renderWorkbench = () => {};
+  context.renderSnapshotEditor = () => {};
+  context.applyUiMode = () => {};
+  context.renderReviewDashboard = (result) => { renderedResult = result; };
+  context.renderReviewDriverCards = () => {};
+  context.renderInputSummaryPanel = () => {};
+  context.banner = (msg) => { bannerMessage = String(msg || ''); };
+  context.OfficeDispatchBackendApi = {
+    createBatch: async () => ({ batch_id: 903 }),
+    saveDrivers: async () => [],
+    saveVehicles: async () => [],
+    saveBatchOrders: async () => [],
+    generateBatchPlan: async () => ({
+      plans: [{ plan_id: 'PLAN-A' }],
+      order_assignments: [{ order_id: 2001, plan_id: 'PLAN-A', driver_id: 1, vehicle_id: 101, status: 'ASSIGNED', assignment_source: 'AUTO' }],
+      exceptions: []
+    }),
+    updateManualAssignment: async (batchId, orderId, payload) => {
+      calls.push(`update:${batchId}:${orderId}:${payload.driver_id}:${payload.vehicle_id}`);
+      return {
+        plans: [{ plan_id: 'PLAN-B' }],
+        order_assignments: [{ order_id: 2001, plan_id: 'PLAN-B', driver_id: payload.driver_id, vehicle_id: payload.vehicle_id, status: 'MANUALLY_ASSIGNED', assignment_source: 'MANUAL' }],
+        exceptions: []
+      };
+    }
+  };
+  await context.handleRunPlanner();
+  const ok = await context.saveManualAssignment('2001', '2', '9');
+  process.stdout.write(JSON.stringify({
+    ok,
+    calls,
+    plan_id: renderedResult?.plans?.[0]?.plan_id || null,
+    assignment_source: renderedResult?.order_assignments?.[0]?.assignment_source || null,
+    status: renderedResult?.order_assignments?.[0]?.status || null,
+    result_keys: Object.keys(renderedResult || {}).sort(),
+    banner_mentions_success: bannerMessage.toLowerCase().includes('manually reassigned')
+  }));
+})();
+"""
+        )
+        self.assertTrue(result["ok"])
+        self.assertEqual(["update:903:2001:2:9"], result["calls"])
+        self.assertEqual("PLAN-B", result["plan_id"])
+        self.assertEqual("MANUAL", result["assignment_source"])
+        self.assertEqual("MANUALLY_ASSIGNED", result["status"])
+        self.assertEqual(["exceptions", "order_assignments", "plans"], result["result_keys"])
+        self.assertTrue(result["banner_mentions_success"])
+
+    def test_manual_reassign_failure_keeps_result_and_does_not_fallback(self) -> None:
+        result = _run_frontend_probe(
+            """
+(async () => {
+  let renderedResult = null;
+  let fallbackUsed = false;
+  let bannerMessage = '';
+  context.bootstrap();
+  context.applySnapshotToState(context.createSampleSnapshot());
+  context.validateViewModel = () => ({ errors: [], warnings: [], rowErrors: { orders: new Set(), drivers: new Set(), vehicles: new Set() } });
+  context.renderValidationPanel = () => {};
+  context.renderWorkbench = () => {};
+  context.renderSnapshotEditor = () => {};
+  context.applyUiMode = () => {};
+  context.renderReviewDashboard = (result) => { renderedResult = result; };
+  context.renderReviewDriverCards = () => {};
+  context.renderInputSummaryPanel = () => {};
+  context.planDispatch = () => { fallbackUsed = true; return { plans: [{ plan_id: 'PLAN-LOCAL' }], order_assignments: [], exceptions: [] }; };
+  context.banner = (msg) => { bannerMessage = String(msg || ''); };
+  context.OfficeDispatchBackendApi = {
+    createBatch: async () => ({ batch_id: 904 }),
+    saveDrivers: async () => [],
+    saveVehicles: async () => [],
+    saveBatchOrders: async () => [],
+    generateBatchPlan: async () => ({
+      plans: [{ plan_id: 'PLAN-A' }],
+      order_assignments: [{ order_id: 2001, plan_id: 'PLAN-A', driver_id: 1, vehicle_id: 101, status: 'ASSIGNED', assignment_source: 'AUTO' }],
+      exceptions: []
+    }),
+    updateManualAssignment: async () => { throw new Error('LOCKED batch'); }
+  };
+  await context.handleRunPlanner();
+  const beforePlanId = renderedResult?.plans?.[0]?.plan_id || null;
+  const ok = await context.saveManualAssignment('2001', '2', '9');
+  process.stdout.write(JSON.stringify({
+    ok,
+    before_plan_id: beforePlanId,
+    after_plan_id: renderedResult?.plans?.[0]?.plan_id || null,
+    fallback_used: fallbackUsed,
+    banner_mentions_failure: bannerMessage.toLowerCase().includes('manual reassignment failed')
+  }));
+})();
+"""
+        )
+        self.assertFalse(result["ok"])
+        self.assertEqual("PLAN-A", result["before_plan_id"])
+        self.assertEqual("PLAN-A", result["after_plan_id"])
+        self.assertFalse(result["fallback_used"])
+        self.assertTrue(result["banner_mentions_failure"])
 
 
 if __name__ == "__main__":

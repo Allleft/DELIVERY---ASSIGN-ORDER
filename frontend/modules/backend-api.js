@@ -52,6 +52,16 @@
     return requestJson("POST", `/api/dispatch/batches/${encodeURIComponent(asText(batchId).trim())}/generate`);
   }
 
+  async function updateManualAssignment(batchId, orderId, payload) {
+    return requestJson(
+      "PATCH",
+      `/api/dispatch/batches/${encodeURIComponent(asText(batchId).trim())}/assignments/${encodeURIComponent(
+        asText(orderId).trim()
+      )}/manual`,
+      payload
+    );
+  }
+
   async function requestJson(method, path, body) {
     if (typeof root.fetch !== "function") {
       throw createApiError("BACKEND_UNAVAILABLE", "fetch is unavailable in this environment.");
@@ -107,6 +117,7 @@
     listVehicles,
     listBatchOrders,
     getBatchResult,
-    generateBatchPlan
+    generateBatchPlan,
+    updateManualAssignment
   });
 })(typeof window !== "undefined" ? window : globalThis);
