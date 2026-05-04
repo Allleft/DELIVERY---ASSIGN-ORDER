@@ -47,7 +47,7 @@ class StaticAddressGeocoder:
         if not path.exists():
             return
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload = json.loads(path.read_text(encoding="utf-8-sig"))
         except (OSError, json.JSONDecodeError):
             return
         if isinstance(payload, dict):
