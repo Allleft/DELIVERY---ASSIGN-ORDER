@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+import logging
 import re
+from time import perf_counter
 from typing import Any
 
 from backend.db.repository import DispatchRepository, InMemoryDispatchRepository
@@ -11,6 +13,8 @@ from backend.services.geocoding import AddressGeocoder
 from dispatch_optimizer.cli import build_drivers, build_orders, build_vehicles, serialize_result
 from dispatch_optimizer.engine import DispatchEngine
 from dispatch_optimizer.providers import HaversineTravelTimeProvider
+
+logger = logging.getLogger(__name__)
 
 
 class DispatchBatchService:
@@ -155,6 +159,9 @@ class DispatchBatchService:
         return self.get_generated_result(batch_id)
 
     def generate_dispatch_for_batch(self, batch_id: int) -> dict[str, Any]:
+        total_start = perf_counter()
+        stage_start = total_start
+
         batch = self._require_batch(batch_id)
         raw_orders = self.repository.list_batch_orders(batch_id)
         if not raw_orders:
@@ -168,28 +175,112 @@ class DispatchBatchService:
         if not raw_vehicles:
             raise ValueError("No active vehicles")
 
+        logger.info(
+            "dispatch_generate stage=load_inputs batch_id=%s orders_count=%s drivers_count=%s vehicles_count=%s elapsed_ms=%.2f",
+            batch_id,
+            len(raw_orders),
+            len(raw_drivers),
+            len(raw_vehicles),
+            (perf_counter() - stage_start) * 1000.0,
+        )
+
+        stage_start = perf_counter()
         normalized_orders = self._normalize_orders_with_geocoding(raw_orders)
         normalized_drivers = self._normalize_drivers_with_geocoding(raw_drivers)
         self.repository.replace_batch_orders(batch_id, normalized_orders)
         self.repository.replace_drivers(normalized_drivers)
+        logger.info(
+            "dispatch_generate stage=geocoding_normalize batch_id=%s orders_count=%s drivers_count=%s vehicles_count=%s elapsed_ms=%.2f",
+            batch_id,
+            len(normalized_orders),
+            len(normalized_drivers),
+            len(raw_vehicles),
+            (perf_counter() - stage_start) * 1000.0,
+        )
 
+        stage_start = perf_counter()
         zone_map = self._resolve_zone_map(normalized_orders)
+        model_orders = build_orders(normalized_orders)
+        model_drivers = build_drivers(normalized_drivers)
+        model_vehicles = build_vehicles(raw_vehicles)
+        logger.info(
+            "dispatch_generate stage=build_models batch_id=%s orders_count=%s drivers_count=%s vehicles_count=%s elapsed_ms=%.2f",
+            batch_id,
+            len(model_orders),
+            len(model_drivers),
+            len(model_vehicles),
+            (perf_counter() - stage_start) * 1000.0,
+        )
+
+        stage_start = perf_counter()
         engine = DispatchEngine(
             travel_provider=self.travel_provider,
             zone_by_postcode=zone_map,
         )
         result = engine.plan_dispatch(
-            build_orders(normalized_orders),
-            build_drivers(normalized_drivers),
-            build_vehicles(raw_vehicles),
+            model_orders,
+            model_drivers,
+            model_vehicles,
         )
+        logger.info(
+            "dispatch_generate stage=plan_dispatch batch_id=%s orders_count=%s drivers_count=%s vehicles_count=%s elapsed_ms=%.2f",
+            batch_id,
+            len(model_orders),
+            len(model_drivers),
+            len(model_vehicles),
+            (perf_counter() - stage_start) * 1000.0,
+        )
+
+        stage_start = perf_counter()
         serialized = serialize_result(result)
+        plans_count = len(serialized.get("plans", [])) if isinstance(serialized, dict) else 0
+        assignments_count = len(serialized.get("order_assignments", [])) if isinstance(serialized, dict) else 0
+        exceptions_count = len(serialized.get("exceptions", [])) if isinstance(serialized, dict) else 0
+        logger.info(
+            "dispatch_generate stage=serialize batch_id=%s plans_count=%s order_assignments_count=%s exceptions_count=%s elapsed_ms=%.2f",
+            batch_id,
+            plans_count,
+            assignments_count,
+            exceptions_count,
+            (perf_counter() - stage_start) * 1000.0,
+        )
+
+        stage_start = perf_counter()
         self.repository.save_generated_results(batch_id, serialized)
+        logger.info(
+            "dispatch_generate stage=save_generated batch_id=%s plans_count=%s order_assignments_count=%s exceptions_count=%s elapsed_ms=%.2f",
+            batch_id,
+            plans_count,
+            assignments_count,
+            exceptions_count,
+            (perf_counter() - stage_start) * 1000.0,
+        )
+
+        stage_start = perf_counter()
         self.repository.update_batch(
             batch_id,
             status="GENERATED",
             generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
             dispatch_date=batch.get("dispatch_date"),
+        )
+        logger.info(
+            "dispatch_generate stage=update_batch batch_id=%s plans_count=%s order_assignments_count=%s exceptions_count=%s elapsed_ms=%.2f",
+            batch_id,
+            plans_count,
+            assignments_count,
+            exceptions_count,
+            (perf_counter() - stage_start) * 1000.0,
+        )
+        logger.info(
+            "dispatch_generate stage=total batch_id=%s orders_count=%s drivers_count=%s vehicles_count=%s plans_count=%s order_assignments_count=%s exceptions_count=%s elapsed_ms=%.2f",
+            batch_id,
+            len(model_orders),
+            len(model_drivers),
+            len(model_vehicles),
+            plans_count,
+            assignments_count,
+            exceptions_count,
+            (perf_counter() - total_start) * 1000.0,
         )
         return serialized
 

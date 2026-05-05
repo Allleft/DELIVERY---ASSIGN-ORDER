@@ -111,6 +111,7 @@ const appState = {
     saving: false
   },
   uiMode: "input",
+  isGeneratingPlan: false,
   isResultStale: false,
   lastGeneratedAt: null,
   reviewSearchQuery: "",
@@ -128,6 +129,7 @@ function bootstrap() {
   appState.currentBackendBatchId = null;
   resetManualReassignState();
   appState.uiMode = "input";
+  appState.isGeneratingPlan = false;
   appState.isResultStale = false;
   appState.lastGeneratedAt = null;
   appState.reviewSearchQuery = "";
@@ -957,6 +959,7 @@ function loadSampleData() {
   appState.currentBackendBatchId = null;
   resetManualReassignState();
   appState.uiMode = "input";
+  appState.isGeneratingPlan = false;
   appState.isResultStale = false;
   appState.lastGeneratedAt = null;
   appState.reviewSearchQuery = "";
@@ -1530,6 +1533,10 @@ function handleExportSnapshot() {
 }
 
 async function handleRunPlanner() {
+  if (appState.isGeneratingPlan) {
+    return;
+  }
+
   const report = validateViewModel(appState.view, { normalize: true });
   appState.validation = report;
   renderValidationPanel(report);
@@ -1538,8 +1545,13 @@ async function handleRunPlanner() {
     banner(`Found ${report.errors.length} blocking error(s). Cannot generate plan.`, "error");
     return;
   }
+
   appState.snapshot = viewModelToSnapshot(appState.view);
   renderSnapshotEditor();
+  appState.isGeneratingPlan = true;
+  setGeneratingPlanUiState(true);
+  banner("Generating dispatch plan, please wait...", "info");
+
   let usedBackendResult = false;
   let backendWarning = "";
   try {
@@ -1554,7 +1566,12 @@ async function handleRunPlanner() {
     backendWarning = buildBackendFallbackWarning(error);
     appState.currentBackendBatchId = null;
     appState.result = planDispatch(appState.snapshot);
+  } finally {
+    appState.isGeneratingPlan = false;
+    setGeneratingPlanUiState(false);
+    renderReviewHeaderActions();
   }
+
   resetManualReassignState();
   appState.uiMode = "review";
   appState.isResultStale = false;
@@ -2448,11 +2465,28 @@ function renderReviewDashboard(result) {
 }
 
 function renderReviewHeaderActions() {
+  setGeneratingPlanUiState(appState.isGeneratingPlan);
+}
+
+function setGeneratingPlanUiState(isBusy) {
+  const busy = !!isBusy;
+  const runPlannerBtn = get("runPlannerBtn");
   const regenerateBtn = get("regeneratePlanBtn");
   const summaryRegenerateBtn = get("summaryRegenerateBtn");
-  const text = appState.isResultStale ? "Regenerate Required" : "Regenerate Plan";
-  if (regenerateBtn) regenerateBtn.textContent = text;
-  if (summaryRegenerateBtn) summaryRegenerateBtn.textContent = text;
+  const regenerateText = busy ? "Generating..." : appState.isResultStale ? "Regenerate Required" : "Regenerate Plan";
+
+  if (runPlannerBtn) {
+    runPlannerBtn.disabled = busy;
+    runPlannerBtn.textContent = busy ? "Generating..." : "Generate Plan";
+  }
+  if (regenerateBtn) {
+    regenerateBtn.disabled = busy;
+    regenerateBtn.textContent = regenerateText;
+  }
+  if (summaryRegenerateBtn) {
+    summaryRegenerateBtn.disabled = busy;
+    summaryRegenerateBtn.textContent = regenerateText;
+  }
 }
 
 function renderReviewSidebarSummary() {

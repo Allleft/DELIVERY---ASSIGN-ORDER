@@ -116,6 +116,34 @@ class OfficeDispatchServiceTest(unittest.TestCase):
         self.assertEqual("GENERATED", self.service.get_dispatch_batch(batch_id)["status"])
         self.assertIn("plans", self.repo.get_generated_results(batch_id))
 
+    def test_generate_dispatch_emits_stage_timing_logs(self) -> None:
+        batch = self.service.create_dispatch_batch("2026-05-01", created_by="office.user")
+        batch_id = int(batch["batch_id"])
+        self._seed_minimum_resources()
+        self.service.save_batch_orders(batch_id, [self._order(order_id=4051), self._order(order_id=4052)])
+
+        with self.assertLogs("backend.services.dispatch_service", level="INFO") as captured:
+            payload = self.service.generate_dispatch_for_batch(batch_id)
+
+        self.assertEqual({"plans", "order_assignments", "exceptions"}, set(payload.keys()))
+        log_text = "\n".join(captured.output)
+        self.assertIn("stage=load_inputs", log_text)
+        self.assertIn("stage=geocoding_normalize", log_text)
+        self.assertIn("stage=build_models", log_text)
+        self.assertIn("stage=plan_dispatch", log_text)
+        self.assertIn("stage=serialize", log_text)
+        self.assertIn("stage=save_generated", log_text)
+        self.assertIn("stage=update_batch", log_text)
+        self.assertIn("stage=total", log_text)
+        self.assertIn(f"batch_id={batch_id}", log_text)
+        self.assertIn("orders_count=", log_text)
+        self.assertIn("drivers_count=", log_text)
+        self.assertIn("vehicles_count=", log_text)
+        self.assertIn("plans_count=", log_text)
+        self.assertIn("order_assignments_count=", log_text)
+        self.assertIn("exceptions_count=", log_text)
+        self.assertIn("elapsed_ms=", log_text)
+
     def test_value_error_for_missing_batch(self) -> None:
         with self.assertRaisesRegex(ValueError, "Missing batch"):
             self.service.get_dispatch_batch(999)

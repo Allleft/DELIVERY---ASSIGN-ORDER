@@ -16,6 +16,7 @@ function makeElement() {{
     querySelector: () => null,
     querySelectorAll: () => [],
     closest: () => null,
+    disabled: false,
     value: '',
     textContent: '',
     innerHTML: '',
@@ -202,6 +203,139 @@ process.stdout.write(JSON.stringify({
         self.assertTrue(str(result["calls"][3]).startswith("saveBatchOrders:"))
         self.assertTrue(str(result["calls"][4]).startswith("generateBatchPlan:"))
 
+    def test_generate_plan_validation_failure_keeps_busy_state_false(self) -> None:
+        result = _run_frontend_probe(
+            """
+(async () => {
+  let validateCalls = 0;
+  const calls = [];
+  const runBtn = context.document.getElementById('runPlannerBtn');
+  const regenBtn = context.document.getElementById('regeneratePlanBtn');
+  const summaryRegenBtn = context.document.getElementById('summaryRegenerateBtn');
+  runBtn.textContent = 'Generate Plan';
+  regenBtn.textContent = 'Regenerate Plan';
+  summaryRegenBtn.textContent = 'Regenerate Plan';
+  context.bootstrap();
+  context.applySnapshotToState(context.createSampleSnapshot());
+  context.validateViewModel = () => {
+    validateCalls += 1;
+    return { errors: ['invalid'], warnings: [], rowErrors: { orders: new Set(), drivers: new Set(), vehicles: new Set() } };
+  };
+  context.renderValidationPanel = () => {};
+  context.renderWorkbench = () => {};
+  context.renderSnapshotEditor = () => {};
+  context.banner = () => {};
+  context.OfficeDispatchBackendApi = {
+    createBatch: async () => { calls.push('createBatch'); return { batch_id: 1 }; },
+    saveDrivers: async () => { calls.push('saveDrivers'); return []; },
+    saveVehicles: async () => { calls.push('saveVehicles'); return []; },
+    saveBatchOrders: async () => { calls.push('saveBatchOrders'); return []; },
+    generateBatchPlan: async () => { calls.push('generateBatchPlan'); return { plans: [], order_assignments: [], exceptions: [] }; }
+  };
+  await context.handleRunPlanner();
+  await context.handleRunPlanner();
+  process.stdout.write(JSON.stringify({
+    validate_calls: validateCalls,
+    backend_calls: calls.length,
+    run_disabled: !!runBtn.disabled,
+    regen_disabled: !!regenBtn.disabled,
+    summary_regen_disabled: !!summaryRegenBtn.disabled,
+    run_text: runBtn.textContent
+  }));
+})();
+"""
+        )
+        self.assertEqual(2, result["validate_calls"])
+        self.assertEqual(0, result["backend_calls"])
+        self.assertFalse(result["run_disabled"])
+        self.assertFalse(result["regen_disabled"])
+        self.assertFalse(result["summary_regen_disabled"])
+        self.assertEqual("Generate Plan", result["run_text"])
+
+    def test_generate_plan_prevents_duplicate_submission_while_busy(self) -> None:
+        result = _run_frontend_probe(
+            """
+(async () => {
+  const calls = [];
+  const runBtn = context.document.getElementById('runPlannerBtn');
+  const regenBtn = context.document.getElementById('regeneratePlanBtn');
+  const summaryRegenBtn = context.document.getElementById('summaryRegenerateBtn');
+  runBtn.textContent = 'Generate Plan';
+  regenBtn.textContent = 'Regenerate Plan';
+  summaryRegenBtn.textContent = 'Regenerate Plan';
+  context.bootstrap();
+  context.applySnapshotToState(context.createSampleSnapshot());
+  context.validateViewModel = () => ({ errors: [], warnings: [], rowErrors: { orders: new Set(), drivers: new Set(), vehicles: new Set() } });
+  context.renderValidationPanel = () => {};
+  context.renderWorkbench = () => {};
+  context.renderSnapshotEditor = () => {};
+  context.applyUiMode = () => {};
+  context.renderReviewDashboard = () => {};
+  context.renderInputSummaryPanel = () => {};
+  context.banner = () => {};
+  let releaseGenerate = null;
+  const generateGate = new Promise((resolve) => { releaseGenerate = resolve; });
+  context.OfficeDispatchBackendApi = {
+    createBatch: async () => { calls.push('createBatch'); return { batch_id: 801 }; },
+    saveDrivers: async () => { calls.push('saveDrivers'); return []; },
+    saveVehicles: async () => { calls.push('saveVehicles'); return []; },
+    saveBatchOrders: async () => { calls.push('saveBatchOrders'); return []; },
+    generateBatchPlan: async () => {
+      calls.push('generateBatchPlan');
+      await generateGate;
+      return { plans: [{ plan_id: 'PLAN-BUSY' }], order_assignments: [], exceptions: [] };
+    }
+  };
+
+  const firstRun = context.handleRunPlanner();
+  await Promise.resolve();
+  await Promise.resolve();
+  const secondRun = context.handleRunPlanner();
+  await Promise.resolve();
+
+  const during = {
+    run_disabled: !!runBtn.disabled,
+    regen_disabled: !!regenBtn.disabled,
+    summary_regen_disabled: !!summaryRegenBtn.disabled,
+    run_text: runBtn.textContent,
+    regen_text: regenBtn.textContent,
+    summary_regen_text: summaryRegenBtn.textContent,
+  };
+
+  releaseGenerate();
+  await firstRun;
+  await secondRun;
+
+  process.stdout.write(JSON.stringify({
+    calls,
+    during,
+    after: {
+      run_disabled: !!runBtn.disabled,
+      regen_disabled: !!regenBtn.disabled,
+      summary_regen_disabled: !!summaryRegenBtn.disabled,
+      run_text: runBtn.textContent,
+      regen_text: regenBtn.textContent,
+      summary_regen_text: summaryRegenBtn.textContent,
+    }
+  }));
+})();
+"""
+        )
+        self.assertEqual(1, sum(1 for item in result["calls"] if item == "createBatch"))
+        self.assertEqual(1, sum(1 for item in result["calls"] if item == "generateBatchPlan"))
+        self.assertTrue(result["during"]["run_disabled"])
+        self.assertTrue(result["during"]["regen_disabled"])
+        self.assertTrue(result["during"]["summary_regen_disabled"])
+        self.assertEqual("Generating...", result["during"]["run_text"])
+        self.assertEqual("Generating...", result["during"]["regen_text"])
+        self.assertEqual("Generating...", result["during"]["summary_regen_text"])
+        self.assertFalse(result["after"]["run_disabled"])
+        self.assertFalse(result["after"]["regen_disabled"])
+        self.assertFalse(result["after"]["summary_regen_disabled"])
+        self.assertEqual("Generate Plan", result["after"]["run_text"])
+        self.assertEqual("Regenerate Plan", result["after"]["regen_text"])
+        self.assertEqual("Regenerate Plan", result["after"]["summary_regen_text"])
+
     def test_generate_plan_falls_back_to_local_when_backend_fails(self) -> None:
         result = _run_frontend_probe(
             """
@@ -232,7 +366,11 @@ process.stdout.write(JSON.stringify({
     used_fallback_result: Array.isArray(renderedResult?.plans) && renderedResult.plans[0]?.plan_id === 'PLAN-LOCAL',
     message_mentions_fallback: bannerMessage.toLowerCase().includes('falling back to local planner'),
     banner_tone: bannerTone,
-    result_keys: Object.keys(renderedResult || {}).sort()
+    result_keys: Object.keys(renderedResult || {}).sort(),
+    run_disabled: !!context.document.getElementById('runPlannerBtn').disabled,
+    run_text: context.document.getElementById('runPlannerBtn').textContent,
+    regen_disabled: !!context.document.getElementById('regeneratePlanBtn').disabled,
+    regen_text: context.document.getElementById('regeneratePlanBtn').textContent
   }));
 })();
 """
@@ -241,6 +379,10 @@ process.stdout.write(JSON.stringify({
         self.assertTrue(result["message_mentions_fallback"])
         self.assertEqual("info", result["banner_tone"])
         self.assertEqual(["exceptions", "order_assignments", "plans"], result["result_keys"])
+        self.assertFalse(result["run_disabled"])
+        self.assertFalse(result["regen_disabled"])
+        self.assertEqual("Generate Plan", result["run_text"])
+        self.assertEqual("Regenerate Plan", result["regen_text"])
 
     def test_manual_reassign_success_uses_backend_batch_and_replaces_result(self) -> None:
         result = _run_frontend_probe(
