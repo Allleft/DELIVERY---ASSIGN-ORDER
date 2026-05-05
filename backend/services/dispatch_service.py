@@ -11,7 +11,7 @@ from typing import Any
 from backend.db.repository import DispatchRepository, InMemoryDispatchRepository
 from backend.services.geocoding import AddressGeocoder
 from dispatch_optimizer.cli import build_drivers, build_orders, build_vehicles, serialize_result
-from dispatch_optimizer.engine import DispatchEngine
+from dispatch_optimizer.engine import DispatchEngine, DispatchEngineConfig
 from dispatch_optimizer.providers import HaversineTravelTimeProvider
 
 logger = logging.getLogger(__name__)
@@ -25,10 +25,12 @@ class DispatchBatchService:
         repository: DispatchRepository,
         zone_by_postcode: dict[str, str] | None = None,
         address_geocoder: AddressGeocoder | None = None,
+        engine_config: DispatchEngineConfig | None = None,
     ) -> None:
         self.repository = repository
         self.zone_by_postcode = zone_by_postcode or {}
         self.address_geocoder = address_geocoder
+        self.engine_config = engine_config or DispatchEngineConfig()
         self.travel_provider = HaversineTravelTimeProvider()
 
     def create_dispatch_batch(self, dispatch_date: str | date, created_by: str, notes: str | None = None) -> dict[str, Any]:
@@ -216,19 +218,29 @@ class DispatchBatchService:
         engine = DispatchEngine(
             travel_provider=self.travel_provider,
             zone_by_postcode=zone_map,
+            config=self.engine_config,
         )
+        self._reset_engine_metrics_safely(engine)
         result = engine.plan_dispatch(
             model_orders,
             model_drivers,
             model_vehicles,
         )
+        route_metrics, candidate_metrics = self._snapshot_engine_metrics_safely(engine)
         logger.info(
-            "dispatch_generate stage=plan_dispatch batch_id=%s orders_count=%s drivers_count=%s vehicles_count=%s elapsed_ms=%.2f",
+            "dispatch_generate stage=plan_dispatch batch_id=%s orders_count=%s drivers_count=%s vehicles_count=%s elapsed_ms=%.2f route_plan_calls=%s route_cache_hits=%s route_cache_misses=%s route_plan_total_ms=%.2f route_plan_timeout_count=%s candidate_count=%s validated_candidate_count=%s",
             batch_id,
             len(model_orders),
             len(model_drivers),
             len(model_vehicles),
             (perf_counter() - stage_start) * 1000.0,
+            route_metrics["route_plan_calls"],
+            route_metrics["route_cache_hits"],
+            route_metrics["route_cache_misses"],
+            route_metrics["route_plan_total_ms"],
+            route_metrics["route_plan_timeout_count"],
+            candidate_metrics["candidate_count"],
+            candidate_metrics["validated_candidate_count"],
         )
 
         stage_start = perf_counter()
@@ -283,6 +295,62 @@ class DispatchBatchService:
             (perf_counter() - total_start) * 1000.0,
         )
         return serialized
+
+    @staticmethod
+    def _reset_engine_metrics_safely(engine: DispatchEngine) -> None:
+        try:
+            reset_route_metrics = getattr(engine.route_planner, "reset_metrics", None)
+            if callable(reset_route_metrics):
+                reset_route_metrics()
+        except Exception:
+            logger.debug("Failed to reset route planner metrics.", exc_info=True)
+
+        try:
+            reset_candidate_metrics = getattr(engine.candidate_enumerator, "reset_metrics", None)
+            if callable(reset_candidate_metrics):
+                reset_candidate_metrics()
+        except Exception:
+            logger.debug("Failed to reset candidate enumerator metrics.", exc_info=True)
+
+    @staticmethod
+    def _snapshot_engine_metrics_safely(engine: DispatchEngine) -> tuple[dict[str, int | float], dict[str, int]]:
+        route_defaults: dict[str, int | float] = {
+            "route_plan_calls": 0,
+            "route_cache_hits": 0,
+            "route_cache_misses": 0,
+            "route_plan_total_ms": 0.0,
+            "route_plan_timeout_count": 0,
+        }
+        candidate_defaults: dict[str, int] = {
+            "candidate_count": 0,
+            "validated_candidate_count": 0,
+        }
+
+        try:
+            route_snapshot = getattr(engine.route_planner, "metrics_snapshot", None)
+            if callable(route_snapshot):
+                route_data = route_snapshot()
+                if isinstance(route_data, dict):
+                    for key in route_defaults:
+                        value = route_data.get(key, route_defaults[key])
+                        if key == "route_plan_total_ms":
+                            route_defaults[key] = float(value)
+                        else:
+                            route_defaults[key] = int(value)
+        except Exception:
+            logger.debug("Failed to snapshot route planner metrics.", exc_info=True)
+
+        try:
+            candidate_snapshot = getattr(engine.candidate_enumerator, "metrics_snapshot", None)
+            if callable(candidate_snapshot):
+                candidate_data = candidate_snapshot()
+                if isinstance(candidate_data, dict):
+                    for key in candidate_defaults:
+                        candidate_defaults[key] = int(candidate_data.get(key, candidate_defaults[key]))
+        except Exception:
+            logger.debug("Failed to snapshot candidate enumerator metrics.", exc_info=True)
+
+        return route_defaults, candidate_defaults
 
     def _require_batch(self, batch_id: int) -> dict[str, Any]:
         batch = self.repository.get_batch(batch_id)

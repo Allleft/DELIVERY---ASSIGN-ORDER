@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import unittest
 from datetime import date
+from unittest.mock import patch
 
 from backend.db.repository import InMemoryDispatchRepository
 from backend.services.dispatch_service import DispatchBatchService
 from backend.services.geocoding import StaticAddressGeocoder
+from dispatch_optimizer.engine import DispatchEngineConfig
 
 
 class OfficeDispatchServiceTest(unittest.TestCase):
@@ -116,6 +118,20 @@ class OfficeDispatchServiceTest(unittest.TestCase):
         self.assertEqual("GENERATED", self.service.get_dispatch_batch(batch_id)["status"])
         self.assertIn("plans", self.repo.get_generated_results(batch_id))
 
+    def test_generate_dispatch_with_candidate_route_time_limit_override_preserves_contract(self) -> None:
+        service = DispatchBatchService(
+            repository=self.repo,
+            engine_config=DispatchEngineConfig(candidate_route_time_limit_seconds=2.0),
+        )
+        batch = service.create_dispatch_batch("2026-05-01", created_by="office.user")
+        batch_id = int(batch["batch_id"])
+        self._seed_minimum_resources()
+        service.save_batch_orders(batch_id, [self._order(order_id=4041), self._order(order_id=4042)])
+
+        payload = service.generate_dispatch_for_batch(batch_id)
+
+        self.assertEqual({"plans", "order_assignments", "exceptions"}, set(payload.keys()))
+
     def test_generate_dispatch_emits_stage_timing_logs(self) -> None:
         batch = self.service.create_dispatch_batch("2026-05-01", created_by="office.user")
         batch_id = int(batch["batch_id"])
@@ -143,6 +159,28 @@ class OfficeDispatchServiceTest(unittest.TestCase):
         self.assertIn("order_assignments_count=", log_text)
         self.assertIn("exceptions_count=", log_text)
         self.assertIn("elapsed_ms=", log_text)
+        self.assertIn("route_plan_calls=", log_text)
+        self.assertIn("route_cache_hits=", log_text)
+        self.assertIn("route_cache_misses=", log_text)
+        self.assertIn("route_plan_total_ms=", log_text)
+        self.assertIn("route_plan_timeout_count=", log_text)
+        self.assertIn("candidate_count=", log_text)
+        self.assertIn("validated_candidate_count=", log_text)
+
+    def test_generate_dispatch_metrics_snapshot_failure_does_not_break_contract(self) -> None:
+        batch = self.service.create_dispatch_batch("2026-05-01", created_by="office.user")
+        batch_id = int(batch["batch_id"])
+        self._seed_minimum_resources()
+        self.service.save_batch_orders(batch_id, [self._order(order_id=4061), self._order(order_id=4062)])
+
+        with patch("dispatch_optimizer.routing_core.RoutePlanner.metrics_snapshot", side_effect=RuntimeError("route fail")):
+            with patch(
+                "dispatch_optimizer.assignment_core.CandidateEnumerator.metrics_snapshot",
+                side_effect=RuntimeError("candidate fail"),
+            ):
+                payload = self.service.generate_dispatch_for_batch(batch_id)
+
+        self.assertEqual({"plans", "order_assignments", "exceptions"}, set(payload.keys()))
 
     def test_value_error_for_missing_batch(self) -> None:
         with self.assertRaisesRegex(ValueError, "Missing batch"):

@@ -27,6 +27,7 @@ class DispatchEngineConfig:
     max_repair_iterations: int = 3
     insertion_max_cost: float = 60.0
     insertion_max_centroid_km: float = 18.0
+    candidate_route_time_limit_seconds: float = 0.25
 
 
 @dataclass
@@ -69,7 +70,10 @@ class DispatchEngine:
             branch_locations=normalized_branch_locations,
             config=snapshot_config,
         )
-        self.route_planner = RoutePlanner(travel_provider)
+        self.route_planner = RoutePlanner(
+            travel_provider,
+            candidate_route_time_limit_seconds=self.config.candidate_route_time_limit_seconds,
+        )
         self.assignment_solver = AssignmentSolver(self.scoring_policy)
         self.candidate_enumerator = CandidateEnumerator(self.route_planner, self.scoring_policy)
 

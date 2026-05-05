@@ -236,6 +236,14 @@ python -m dispatch_optimizer.cli examples/sample-dispatch-input.json
   - `max_retries`
   - `backoff_seconds`
 
+### Candidate Route Validation Time Limit
+
+- Candidate-stage OR-Tools route validation time limit is configurable through:
+  - `DispatchEngineConfig.candidate_route_time_limit_seconds` (default: `0.25`)
+  - runtime env override (Office backend only): `OFFICE_DISPATCH_CANDIDATE_ROUTE_TIME_LIMIT_SECONDS`
+- Missing/empty/invalid/non-positive env values safely fall back to `0.25`.
+- This setting only controls candidate-stage route feasibility checks and does **not** change the top-level output contract (`plans / order_assignments / exceptions`).
+
 ## 9. Important Rules and Constraints
 
 - Top-level output contract is fixed: `plans / order_assignments / exceptions`.

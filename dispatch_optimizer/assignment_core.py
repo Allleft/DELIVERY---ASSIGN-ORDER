@@ -58,6 +58,18 @@ class CandidateEnumerator:
         self._boundary_shift_margin_minutes = 30
         self._boundary_window_margin_minutes = 20
         self._tight_window_minutes = 120
+        self.candidate_count = 0
+        self.validated_candidate_count = 0
+
+    def reset_metrics(self) -> None:
+        self.candidate_count = 0
+        self.validated_candidate_count = 0
+
+    def metrics_snapshot(self) -> dict[str, int]:
+        return {
+            "candidate_count": int(self.candidate_count),
+            "validated_candidate_count": int(self.validated_candidate_count),
+        }
 
     def enumerate(
         self,
@@ -154,6 +166,9 @@ class CandidateEnumerator:
                             explanation=tuple(explanation),
                         )
                     )
+                    self.candidate_count += 1
+                    if route_validated:
+                        self.validated_candidate_count += 1
             if not run_candidates:
                 rejected_runs.append(run.run_id)
             else:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from time import perf_counter
 
 from .models import (
     FIXED_STOP_MINUTES,
@@ -23,6 +24,8 @@ try:
 except ModuleNotFoundError:
     ORTOOLS_ROUTING_AVAILABLE = False
 
+DEFAULT_CANDIDATE_ROUTE_TIME_LIMIT_SECONDS = 0.25
+
 
 @dataclass(frozen=True)
 class RouteResult:
@@ -38,28 +41,80 @@ class RouteResult:
 
 
 class RoutePlanner:
-    def __init__(self, travel_provider: TravelTimeProvider):
+    def __init__(
+        self,
+        travel_provider: TravelTimeProvider,
+        candidate_route_time_limit_seconds: float = DEFAULT_CANDIDATE_ROUTE_TIME_LIMIT_SECONDS,
+    ):
         self.travel_provider = travel_provider
+        self.candidate_route_time_limit_seconds = self._normalize_candidate_route_time_limit_seconds(
+            candidate_route_time_limit_seconds
+        )
         self._route_cache: dict[tuple, RouteResult] = {}
         self.cache_hits = 0
         self.cache_misses = 0
+        self.route_plan_calls = 0
+        self.route_cache_hits = 0
+        self.route_cache_misses = 0
+        self.route_plan_total_ms = 0.0
+        self.route_plan_timeout_count = 0
+
+    def reset_metrics(self) -> None:
+        self.cache_hits = 0
+        self.cache_misses = 0
+        self.route_plan_calls = 0
+        self.route_cache_hits = 0
+        self.route_cache_misses = 0
+        self.route_plan_total_ms = 0.0
+        self.route_plan_timeout_count = 0
+
+    def metrics_snapshot(self) -> dict[str, int | float]:
+        return {
+            "route_plan_calls": int(self.route_plan_calls),
+            "route_cache_hits": int(self.route_cache_hits),
+            "route_cache_misses": int(self.route_cache_misses),
+            "route_plan_total_ms": float(self.route_plan_total_ms),
+            "route_plan_timeout_count": int(self.route_plan_timeout_count),
+        }
 
     def plan(self, run: DispatchRun, driver: DispatchDriver, vehicle: DispatchVehicle, objective_score: int = 0) -> RouteResult:
-        cache_key = self._route_cache_key(run, driver, vehicle)
-        cached = self._route_cache.get(cache_key)
-        if cached is not None:
-            self.cache_hits += 1
-            return cached
-        self.cache_misses += 1
-        self._prefetch_run_pairs(run, driver)
-        if ORTOOLS_ROUTING_AVAILABLE:
-            result = self._plan_with_ortools(run, driver)
-            if result.feasible:
-                self._route_cache[cache_key] = result
-                return result
-        result = self._plan_greedily(run, driver)
-        self._route_cache[cache_key] = result
-        return result
+        started_at = perf_counter()
+        try:
+            self.route_plan_calls += 1
+        except Exception:
+            pass
+
+        try:
+            cache_key = self._route_cache_key(run, driver, vehicle)
+            cached = self._route_cache.get(cache_key)
+            if cached is not None:
+                try:
+                    self.cache_hits += 1
+                    self.route_cache_hits += 1
+                except Exception:
+                    pass
+                return cached
+            try:
+                self.cache_misses += 1
+                self.route_cache_misses += 1
+            except Exception:
+                pass
+            self._prefetch_run_pairs(run, driver)
+            if ORTOOLS_ROUTING_AVAILABLE:
+                result = self._plan_with_ortools(run, driver)
+                if result.feasible:
+                    self._route_cache[cache_key] = result
+                    return result
+            result = self._plan_greedily(run, driver)
+            self._route_cache[cache_key] = result
+            return result
+        finally:
+            try:
+                elapsed_ms = (perf_counter() - started_at) * 1000.0
+                if elapsed_ms >= 0:
+                    self.route_plan_total_ms += elapsed_ms
+            except Exception:
+                pass
 
     def build_dispatch_plan(
         self,
@@ -305,10 +360,14 @@ class RoutePlanner:
         search_parameters = pywrapcp.DefaultRoutingSearchParameters()
         search_parameters.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
         search_parameters.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
-        search_parameters.time_limit.seconds = 2
+        self._apply_candidate_route_time_limit(search_parameters)
 
         solution = routing.SolveWithParameters(search_parameters)
         if solution is None:
+            try:
+                self._record_route_timeout_status(self._routing_status_value(routing))
+            except Exception:
+                pass
             return self._plan_greedily(run, driver)
 
         ordered_orders: list[DispatchOrder] = []
@@ -361,3 +420,43 @@ class RoutePlanner:
             reason_code=None if planned_finish <= driver.shift_end else "SHIFT_OVERRUN",
             reason_text=None if planned_finish <= driver.shift_end else "Route finishes after driver shift end.",
         )
+
+    @staticmethod
+    def _routing_fail_timeout_status() -> int | None:
+        try:
+            return int(
+                routing_enums_pb2.RoutingSearchStatus.DESCRIPTOR.enum_values_by_name["ROUTING_FAIL_TIMEOUT"].number
+            )
+        except Exception:
+            return None
+
+    @staticmethod
+    def _routing_status_value(routing) -> int | None:
+        try:
+            return int(routing.status())
+        except Exception:
+            return None
+
+    def _record_route_timeout_status(self, status_value: int | None) -> None:
+        timeout_status = self._routing_fail_timeout_status()
+        if timeout_status is None:
+            return
+        if status_value == timeout_status:
+            self.route_plan_timeout_count += 1
+
+    @staticmethod
+    def _normalize_candidate_route_time_limit_seconds(value: float) -> float:
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and float(value) > 0:
+            return float(value)
+        return DEFAULT_CANDIDATE_ROUTE_TIME_LIMIT_SECONDS
+
+    def _apply_candidate_route_time_limit(self, search_parameters) -> None:
+        limit_seconds = self._normalize_candidate_route_time_limit_seconds(self.candidate_route_time_limit_seconds)
+        whole_seconds = int(limit_seconds)
+        nanos = int(round((limit_seconds - whole_seconds) * 1_000_000_000))
+        if nanos >= 1_000_000_000:
+            whole_seconds += 1
+            nanos -= 1_000_000_000
+
+        search_parameters.time_limit.seconds = whole_seconds
+        search_parameters.time_limit.nanos = nanos
